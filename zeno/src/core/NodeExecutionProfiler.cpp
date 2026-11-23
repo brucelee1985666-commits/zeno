@@ -370,6 +370,8 @@ AetherExecutionReport getAetherExecutionReport() {
 #ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
     report.findings.emplace_back(
         "Smart scheduler reorders only requested graph roots using historical CPU apply EWMA and the longest known dependency path; dependencies remain on the existing recursive execution path.");
+    report.findings.emplace_back(
+        "CPU/CUDA backend dispatch and transfer elimination remain disabled: node-level backend capability and data-residency contracts are not yet available.");
 #else
     report.findings.emplace_back(
         "Smart scheduler is disabled; graph roots retain the legacy input order.");
