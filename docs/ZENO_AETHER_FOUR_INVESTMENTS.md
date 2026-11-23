@@ -135,3 +135,22 @@ API:
 
 The profiler is opt-in and does not alter default builds. It is a measurement
 foundation, not yet a UI panel or a complete CPU/GPU timeline.
+
+
+## ZenoCompute increment 3 — dependency traversal profiling
+
+Added an opt-in measurement around `INode::preApply()` input resolution.
+Per-node snapshots now also include the number of bound dependency edges visited
+and the elapsed time spent resolving them. The scope is exception-safe and is
+compiled only with `ZENO_AETHER_ENABLE_PROFILER` enabled.
+
+Important interpretation: dependency-resolution time is **inclusive**. It
+includes recursive upstream node execution triggered by `requireInput()`;
+therefore, summing this field across nodes double-counts shared upstream work.
+It is useful for identifying expensive dependency chains, but it is not a
+pure scheduler queue-wait metric. The current graph executor is recursive and
+serial: `Graph::applyNodes()` iterates requested nodes, while
+`Graph::applyNode()` uses a visited set and `INode::requireInput()`
+recursively evaluates producers. Node input/output maps and the graph execution
+context are mutable. Parallel scheduling must not be enabled until these
+ownership and synchronization rules are redesigned and tested.

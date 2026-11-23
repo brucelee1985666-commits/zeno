@@ -135,6 +135,9 @@ ZENO_API void INode::preApply() {
         }
     }
 #endif
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+    NodeDependencyProfileScope dependencyProfile(myname, inputBounds.size());
+#endif
     for (auto const &[ds, bound]: inputBounds) {
         requireInput(ds);
     }

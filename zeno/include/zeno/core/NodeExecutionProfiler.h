@@ -15,6 +15,8 @@ struct NodeExecutionProfile {
     double totalMilliseconds = 0.0;
     double averageMilliseconds = 0.0;
     double maximumMilliseconds = 0.0;
+    std::uint64_t dependencyEdges = 0;
+    double dependencyResolutionMilliseconds = 0.0;
 };
 
 struct GpuKernelExecutionProfile {
@@ -37,6 +39,23 @@ ZENO_API void resetNodeExecutionProfile();
 ZENO_API void recordNodeExecution(const std::string &node,
                                   double elapsedMilliseconds,
                                   bool failed);
+ZENO_API void recordNodeDependencyResolution(const std::string &node,
+                                             std::uint64_t dependencyEdges,
+                                             double elapsedMilliseconds);
+
+class NodeDependencyProfileScope {
+public:
+    NodeDependencyProfileScope(std::string nodeName, std::uint64_t dependencyEdges);
+    ~NodeDependencyProfileScope();
+
+    NodeDependencyProfileScope(NodeDependencyProfileScope const &) = delete;
+    NodeDependencyProfileScope &operator=(NodeDependencyProfileScope const &) = delete;
+
+private:
+    std::string nodeName;
+    std::uint64_t dependencyEdges;
+    std::chrono::steady_clock::time_point started;
+};
 
 class NodeExecutionProfileScope {
 public:
