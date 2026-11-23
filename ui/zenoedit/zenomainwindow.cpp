@@ -223,7 +223,7 @@ void ZenoMainWindow::initMenu()
                 const double newGpu = currentTotals.value("gpu_kernel_ms").toDouble();
                 const double oldBytes = previousTotals.value("gpu_transfer_bytes").toDouble();
                 const double newBytes = currentTotals.value("gpu_transfer_bytes").toDouble();
-                comparisonText = tr("Change versus previous captured graph execution:\n%1\n%2\nGPU transfer bytes: %3 -> %4 (%5)")
+                comparisonText = tr("Change versus previous captured graph execution:\n%1\n%2\nGPU transfer bytes: %3 -> %4 (%5%6)")
                     .arg(deltaLine(tr("Node apply"), oldCpu, newCpu))
                     .arg(deltaLine(tr("Instrumented GPU kernels"), oldGpu, newGpu))
                     .arg(QString::number(static_cast<qulonglong>(oldBytes)))
