@@ -74,6 +74,12 @@ std::atomic<std::uint64_t> &activeExecutionId() {
 
 thread_local unsigned int executionScopeDepth = 0;
 
+std::string historicalNodeKey(const std::string &nodeName, const void *graphIdentity) {
+    std::ostringstream key;
+    key << reinterpret_cast<std::uintptr_t>(graphIdentity) << ':' << nodeName;
+    return key.str();
+}
+
 std::string jsonEscape(const std::string &value) {
     std::ostringstream out;
     for (unsigned char ch : value) {
@@ -126,7 +132,7 @@ void resetGpuTransferExecutionProfile() {
 #endif
 }
 
-void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bool failed) {
+void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bool failed, const void *graphIdentity) {
     std::lock_guard<std::mutex> lock(profileMutex());
     auto &entry = profileData()[node];
     ++entry.calls;
@@ -136,7 +142,7 @@ void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bo
 
     // Keep a bounded-memory EWMA across graph executions. Current-run counters
     // may be reset; historical estimates deliberately survive those resets.
-    auto &history = historicalProfileData()[node];
+    auto &history = historicalProfileData()[historicalNodeKey(node, graphIdentity)];
     constexpr double alpha = 0.20;
     history.meanApplyMilliseconds = history.samples == 0
         ? elapsedMilliseconds
@@ -179,10 +185,10 @@ std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
 }
 
 
-AetherNodeCostEstimate getAetherNodeCostEstimate(const std::string &nodeName) {
+AetherNodeCostEstimate getAetherNodeCostEstimate(const std::string &nodeName, const void *graphIdentity) {
     std::lock_guard<std::mutex> lock(profileMutex());
     AetherNodeCostEstimate estimate;
-    const auto it = historicalProfileData().find(nodeName);
+    const auto it = historicalProfileData().find(historicalNodeKey(nodeName, graphIdentity));
     if (it == historicalProfileData().end()) return estimate;
     estimate.meanApplyMilliseconds = it->second.meanApplyMilliseconds;
     estimate.samples = it->second.samples;
@@ -259,13 +265,13 @@ NodeDependencyProfileScope::~NodeDependencyProfileScope() {
     recordNodeDependencyResolution(nodeName, dependencyEdges, elapsed);
 }
 
-NodeExecutionProfileScope::NodeExecutionProfileScope(std::string node)
-    : nodeName(std::move(node)), started(std::chrono::steady_clock::now()) {}
+NodeExecutionProfileScope::NodeExecutionProfileScope(std::string node, const void *identity)
+    : nodeName(std::move(node)), started(std::chrono::steady_clock::now()), graphIdentity(identity) {}
 
 NodeExecutionProfileScope::~NodeExecutionProfileScope() {
     const auto elapsed = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
-    recordNodeExecution(nodeName, elapsed, failed);
+    recordNodeExecution(nodeName, elapsed, failed, graphIdentity);
 }
 
 AetherExecutionProfileScope::AetherExecutionProfileScope() {
