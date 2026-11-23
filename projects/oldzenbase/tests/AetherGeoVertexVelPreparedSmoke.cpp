@@ -36,8 +36,7 @@ int main() {
     const auto plan = zeno::buildAetherExecutionPlan(graph, {"velocity"});
     assert(plan.allNodesCpuParallelSafe);
 
-    std::map<std::string, zeno::AetherPreparedNodeWork> work;
-    work.emplace("velocity", zeno::makeAetherGeoVertexVelPreparedWork());
+    const auto work = zeno::makeAetherOldzenbasePreparedWorkForPlan(graph, plan);
     const auto outputs = zeno::executeAetherPreparedPlanTaskflow(graph, plan, work);
     const auto particles = std::dynamic_pointer_cast<zeno::ParticlesObject>(
         outputs.at("velocity").at("MeshVel"));
