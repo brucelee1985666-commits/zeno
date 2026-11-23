@@ -35,7 +35,11 @@ ZENO_API Context::Context(Context const &other)
 {}
 
 ZENO_API Graph::Graph() = default;
-ZENO_API Graph::~Graph() = default;
+ZENO_API Graph::~Graph() {
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+    clearAetherNodeCostHistory(this);
+#endif
+}
 
 ZENO_API zany const &Graph::getNodeOutput(
     std::string const &sn, std::string const &ss) const {
