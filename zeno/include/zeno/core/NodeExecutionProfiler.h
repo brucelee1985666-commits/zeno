@@ -102,6 +102,7 @@ struct AetherScheduleEntry {
 
 ZENO_API AetherNodeCostEstimate getAetherNodeCostEstimate(
     const std::string &nodeName, const void *graphIdentity = nullptr);
+ZENO_API void clearAetherNodeCostHistory(const void *graphIdentity);
 ZENO_API void recordAetherScheduleOrder(
     const std::vector<AetherScheduleEntry> &entries);
 ZENO_API std::vector<AetherScheduleEntry> getAetherScheduleOrder();
