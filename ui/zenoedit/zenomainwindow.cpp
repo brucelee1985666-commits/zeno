@@ -42,6 +42,7 @@
 #include "viewport/optixviewport.h"
 #include "ui_zenomainwindow.h"
 #include <QJsonDocument>
+#include <QJsonObject>
 #include "dialog/zdocklayoutmangedlg.h"
 #include "panel/zenoimagepanel.h"
 #include "dialog/zshortcutsettingdlg.h"
