@@ -106,6 +106,33 @@ ZENO_API AetherExecutionReport getAetherExecutionReport();
 // Stable, dependency-free JSON export of the report.
 ZENO_API std::string getAetherExecutionReportJson();
 
+struct AetherMetricDelta {
+    std::string name;
+    std::uint64_t previousCalls = 0;
+    std::uint64_t currentCalls = 0;
+    double previousMilliseconds = 0.0;
+    double currentMilliseconds = 0.0;
+    double deltaMilliseconds = 0.0;
+    // Zero when the baseline is zero (relative change is undefined).
+    double deltaPercent = 0.0;
+};
+
+struct AetherExecutionReportComparison {
+    std::uint64_t baselineExecutionId = 0;
+    std::uint64_t candidateExecutionId = 0;
+    double nodeApplyDeltaMilliseconds = 0.0;
+    double nodeApplyDeltaPercent = 0.0;
+    double gpuKernelDeltaMilliseconds = 0.0;
+    double gpuKernelDeltaPercent = 0.0;
+    std::int64_t gpuTransferBytesDelta = 0;
+    std::vector<AetherMetricDelta> nodes;
+    std::vector<AetherMetricDelta> gpuKernels;
+};
+
+ZENO_API AetherExecutionReportComparison compareAetherExecutionReports(
+    AetherExecutionReport const &baseline,
+    AetherExecutionReport const &candidate);
+
 // Graph::applyNodes owns this scope. Nested graph applications on the same
 // thread share the outer execution and do not reset its counters.
 class AetherExecutionProfileScope {
