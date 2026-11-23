@@ -1,127 +1,79 @@
 # Aether native-node parallelization candidates
 
-Status: native prepared-callback adapters implemented for `TransformMesh`,
-`GeoVertexVel`, `PrimitiveToParticles`, and `ParticlesToPrimitive` in the optional
-`oldzenbase` extension. It is callable only through the prepared-callback API;
-ordinary `INode::apply()` is not routed through Taskflow.
+Status: four native prepared-callback adapters are implemented in the optional
+`oldzenbase` extension: `TransformMesh`, `GeoVertexVel`,
+`PrimitiveToParticles`, and `ParticlesToPrimitive`.
+
+They are callable only through the audited prepared-callback API. Ordinary
+`INode::apply()` and `Graph::applyNodes` are not redirected to Taskflow.
 
 ## Safety gate
 
-The capability contract is intentionally conservative. A node may only be
-declared CPU-parallel-safe after all of the following are true:
+A node may be declared CPU-parallel-safe only when:
 
 1. It reads inputs without mutating shared input objects.
-2. It creates outputs owned by that invocation (or writes to an explicitly
-   declared, disjoint resource).
+2. It creates outputs owned by that invocation.
 3. It has no global, session, filesystem, UI, random-generator, or hidden
    graph-context side effects.
-4. It is deterministic for the same input values.
-5. Its implementation and any helper it calls are safe when invoked
-   concurrently with other nodes.
+4. It is deterministic for identical inputs.
+5. Its implementation and helpers are safe under concurrent invocation.
 
-The current Taskflow adapter accepts prepared callbacks, not `INode` objects.
-It deliberately does not call the protected `apply()` method, `preApply()`,
-or `Graph::applyNode()`. A capability declaration alone therefore does not
-make a production node execute concurrently. A future native adapter must
-supply a reviewed per-node callback and preserve input/output ownership.
+The Taskflow adapter accepts reviewed callbacks, not arbitrary `INode`
+instances. It does not call `INode::apply()`, `preApply()`, or
+`Graph::applyNode()`. A capability declaration alone never authorizes
+execution through Taskflow.
 
-## Implemented first adapter: TransformMesh
+## Implemented adapters
 
-`projects/oldzenbase/mesh/TransformMesh.cpp` now declares a conservative CPU
-capability contract and exposes `isAetherTransformMeshNode()` plus
-`makeAetherTransformMeshPreparedWork()`. The callback consumes the prepared
-input snapshot, reads the source mesh without modifying it, and returns a new
-mesh output. It does not call `INode::apply()` or write to the graph's output
-map. The shared transform implementation also rejects singular normal
-transforms and non-finite output coordinates. A dedicated smoke test checks
-translation, normal handling, output isolation, and singular-scale rejection.
+| Node | Contract and validation |
+|---|---|
+| `TransformMesh` | Reads a source mesh, creates a new mesh, transforms vertices and normals, rejects non-finite results and singular normal transforms. |
+| `GeoVertexVel` | Reads two meshes and `dt`, requires matching vertex counts and finite non-zero `dt`, creates a new particle object, rejects non-finite velocities. |
+| `PrimitiveToParticles` | Reads primitive positions and optional velocity; validates velocity type/count, initializes missing velocity to zero, creates a new particle object. |
+| `ParticlesToPrimitive` | Requires matching position/velocity counts, allocates matching output storage, writes every element, and rejects mismatched arrays. |
 
-This is an opt-in building block, not an automatic scheduler integration: a
-caller can use `makeAetherOldzenbasePreparedWorkForPlan()` to map each planned
-node to one of the reviewed callbacks, then invoke the prepared Taskflow runner.
-The dispatcher rejects incomplete/unsafe plans, missing nodes, and unknown node
-types; it never falls back to arbitrary `INode::apply()`. Legacy graph execution remains unchanged.
+Each adapter has a dedicated smoke test registered in the optional Taskflow
+CI target. Tests check representative output values, rejection paths, and
+that source objects / graph outputs are not mutated by the prepared callback.
 
-## Implemented second adapter: GeoVertexVel
+The dispatcher `makeAetherOldzenbasePreparedWorkForPlan()` maps only the
+reviewed node types to callbacks. It rejects incomplete or unsafe plans,
+missing nodes, and unknown node types; it never falls back to arbitrary
+`INode::apply()`. The callback runner preserves dependency edges and returns
+invocation-owned output maps.
 
-`projects/oldzenbase/mesh/PolyVelocity.cpp` now provides a pure helper shared by
-legacy `apply()` and the prepared callback. It validates all three inputs,
-requires finite non-zero `dt` and matching mesh vertex counts, rejects
-non-finite velocities, and returns a fresh `ParticlesObject` without mutating
-either input mesh. Its CPU capability contract is opt-in and a dedicated
-Taskflow smoke test checks the velocity result, graph-output isolation, zero
-`dt`, and mismatched vertex counts. As with `TransformMesh`, this is an
-explicit callback building block; it does not route normal graph execution
-through Taskflow.
+## Explicit exclusions
 
-## Implemented third adapter: PrimitiveToParticles
-
-`projects/oldzenbase/pars/PrimitiveToParticles.cpp` now validates the primitive
-input and the optional `vel` attribute. A present velocity attribute must be
-`vec3f` and match the position count; when absent, velocity is explicitly
-initialized to zero rather than relying on default vector initialization.
-The callback reads the source primitive and returns a fresh `ParticlesObject`.
-Its smoke test covers position/velocity conversion, absent-velocity defaults,
-malformed attribute lengths, and graph-output isolation.
-
-## Implemented fourth adapter: ParticlesToPrimitive
-
-`projects/oldzenbase/pars/ParticlesToPrimitive.cpp` now requires matching
-position and velocity counts before conversion. It creates a new primitive,
-resizes its base position storage and velocity attribute to the same count,
-and writes every element, avoiding the legacy behavior that resized to the
-maximum of two potentially unequal arrays and left gaps uninitialized. The
-prepared callback returns only the newly owned primitive. Its smoke test
-checks converted attributes, graph-output isolation, and rejection of
-mismatched arrays.
-
-## Remaining candidates from the legacy oldzenbase extension
-
-These are candidates for follow-up adapters, not approved opt-ins yet.
-
-| Node | Source | Static assessment | Gate before opt-in |
-|---|---|---|---|
-| `GeoVertexVel` | `projects/oldzenbase/mesh/PolyVelocity.cpp` | Reads two meshes and `dt`, creates a new particle object, and writes only its own output. | Validate equal vertex counts and nonzero `dt`; test malformed inputs before enabling. |
-| `PrimitiveToParticles` | `projects/oldzenbase/pars/PrimitiveToParticles.cpp` | Reads primitive attributes and creates a new particle object. No external side effects are apparent. | Test absent/malformed `pos` and `vel` attributes and confirm output ownership. |
-| `ParticlesToPrimitive` | `projects/oldzenbase/pars/ParticlesToPrimitive.cpp` | Reads particle arrays and creates a new primitive object. No external side effects are apparent. | Test unequal position/velocity lengths and attribute initialization. |
-
-All four are inside the optional `oldzenbase` extension; the extension is OFF
-by default. These source-level observations are not a substitute for runtime
-race testing or object-lifetime review.
-
-## Excluded from the first batch
-
-- `RandomParticles` uses the process-global `drand48()` generator (or
-  `rand()` on MSVC); its random state is not an explicit per-node resource.
-- `MeshCopy` mutates the supplied `copyTo` mesh, so separate nodes may alias
+- `RandomParticles`: uses process-global `drand48()` (or `rand()` on
+  MSVC); random state is not an explicit per-node resource.
+- `MeshCopy`: mutates the supplied `copyTo` mesh; separate nodes may alias
   and write the same object.
-- `MeshToPrimitive` and `PrimitiveToMesh` have `ConvertTo` subclasses in the
-  same source file that call `move_assign` on an input object. Do not put
-  a CPU-safe capability on either base class unless the mutating subclasses
-  are separately overridden to remain conservative.
-- `PolyDuplicate` clones then mutates cloned meshes. The clone deep-copy
-  semantics and nested OpenMP behavior need explicit validation first.
+- `MeshToPrimitive` and `PrimitiveToMesh`: `ConvertTo` subclasses in the
+  same source file call `move_assign` on an input object. Keep the base class
+  conservative until subclasses have separate contracts.
+- `PolyDuplicate`: clone/deep-copy semantics and nested OpenMP behavior need
+  explicit validation.
 
-## Required next implementation increment
+## Remaining engineering gates
 
-1. Add focused tests for each candidate data contract and aliasing behavior.
-2. Add a native callback factory that prepares immutable inputs and returns
-   invocation-owned outputs; do not expose or call arbitrary `INode::apply()`
-   from worker threads.
-3. Add a tiny producer/consumer graph test that runs the native callbacks with
-   Taskflow and checks deterministic outputs and no mutation of source objects.
-4. Only then opt in the individually reviewed node classes. Keep every other
-   node on the legacy executor.
+1. Obtain a completed remote CI run for both the default-off core build and
+   the Taskflow 3.11 configure/build/CTest matrix.
+2. Run race-sanitizer or equivalent stress tests on a supported environment;
+   the current CPU CI does not prove absence of data races.
+3. Add a full graph integration test for the explicit dispatcher, including
+   producer/consumer dependencies, muted outputs, and stale-plan rejection.
+4. Review object lifetime and aliasing across multiple callbacks; current
+   `zany` snapshots hold shared pointers and are not deep copies.
+5. Benchmark against the legacy executor before enabling any automatic
+   scheduling. There is currently no automatic routing and no performance
+   claim.
 
 ## Current limitations
 
-- `TransformMesh`, `GeoVertexVel`, `PrimitiveToParticles`, and `ParticlesToPrimitive`
-are the only production nodes in this extension that currently override
-`getAetherExecutionCapabilities()` for the Aether CPU contract; all other nodes
-retain the conservative default.
-- `oldzenbase` is optional and categorized as deprecated.
-- The Taskflow prepared callback bridge is a prototype, not an integration
+- Only the four nodes listed above override the Aether CPU capability contract
+  in `oldzenbase`; other nodes remain conservative by default.
+- `oldzenbase` is optional and deprecated.
+- The Taskflow prepared-callback bridge is an opt-in prototype, not a
   replacement for `Graph::applyNodes`.
-- The TransformMesh smoke test is added to the remote CI matrix but has not yet
-  produced a passing run. No successful C++ build, CTest, race sanitizer,
-  full runtime graph test, or benchmark result is claimed by this inventory.
+- The CPU CI does not validate CUDA/OptiX, editor/Qt integration, race
+  sanitizer behavior, production runtime semantics, or performance.
