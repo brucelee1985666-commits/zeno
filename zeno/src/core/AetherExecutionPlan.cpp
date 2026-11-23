@@ -13,7 +13,7 @@
 namespace zeno {
 namespace {
 
-enum class VisitState { Unseen, Visiting, Complete };
+enum class VisitState { Visiting, Complete };
 
 bool writesResource(AetherResourceAccessMode mode) {
     return mode == AetherResourceAccessMode::Write ||
