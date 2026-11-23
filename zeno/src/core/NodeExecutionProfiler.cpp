@@ -25,6 +25,17 @@ std::unordered_map<std::string, Aggregate> &profileData() {
     return data;
 }
 
+struct GpuAggregate {
+    std::uint64_t calls = 0;
+    double totalMilliseconds = 0.0;
+    double maximumMilliseconds = 0.0;
+};
+
+std::unordered_map<std::string, GpuAggregate> &gpuProfileData() {
+    static std::unordered_map<std::string, GpuAggregate> data;
+    return data;
+}
+
 } // namespace
 
 void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bool failed) {
@@ -65,6 +76,42 @@ std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
 void resetNodeExecutionProfile() {
     std::lock_guard<std::mutex> lock(profileMutex());
     profileData().clear();
+}
+
+void recordGpuKernelExecution(const std::string &kernel, double elapsedMilliseconds) {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    auto &entry = gpuProfileData()[kernel];
+    ++entry.calls;
+    entry.totalMilliseconds += elapsedMilliseconds;
+    entry.maximumMilliseconds = std::max(entry.maximumMilliseconds, elapsedMilliseconds);
+}
+
+std::vector<GpuKernelExecutionProfile> getGpuKernelExecutionProfile() {
+    std::vector<GpuKernelExecutionProfile> result;
+    {
+        std::lock_guard<std::mutex> lock(profileMutex());
+        result.reserve(gpuProfileData().size());
+        for (auto const &item : gpuProfileData()) {
+            GpuKernelExecutionProfile row;
+            row.kernel = item.first;
+            row.calls = item.second.calls;
+            row.totalMilliseconds = item.second.totalMilliseconds;
+            row.averageMilliseconds = row.calls
+                ? row.totalMilliseconds / static_cast<double>(row.calls) : 0.0;
+            row.maximumMilliseconds = item.second.maximumMilliseconds;
+            result.emplace_back(std::move(row));
+        }
+    }
+    std::sort(result.begin(), result.end(),
+        [](GpuKernelExecutionProfile const &a, GpuKernelExecutionProfile const &b) {
+            return a.totalMilliseconds > b.totalMilliseconds;
+        });
+    return result;
+}
+
+void resetGpuKernelExecutionProfile() {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    gpuProfileData().clear();
 }
 
 NodeExecutionProfileScope::NodeExecutionProfileScope(std::string node)

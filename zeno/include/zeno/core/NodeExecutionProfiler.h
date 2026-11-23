@@ -17,6 +17,20 @@ struct NodeExecutionProfile {
     double maximumMilliseconds = 0.0;
 };
 
+struct GpuKernelExecutionProfile {
+    std::string kernel;
+    std::uint64_t calls = 0;
+    double totalMilliseconds = 0.0;
+    double averageMilliseconds = 0.0;
+    double maximumMilliseconds = 0.0;
+};
+
+// GPU kernel timings are collected from CUDA events on the launch stream.
+ZENO_API std::vector<GpuKernelExecutionProfile> getGpuKernelExecutionProfile();
+ZENO_API void resetGpuKernelExecutionProfile();
+ZENO_API void recordGpuKernelExecution(const std::string &kernel,
+                                       double elapsedMilliseconds);
+
 // Thread-safe aggregate profiler. Snapshot is sorted by total time descending.
 ZENO_API std::vector<NodeExecutionProfile> getNodeExecutionProfile();
 ZENO_API void resetNodeExecutionProfile();
