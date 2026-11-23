@@ -114,3 +114,15 @@ Status: source paths mapped; transfer counters not implemented; no build or runt
 A patch artifact is now included at `patches/zpc/0001-zpc-explicit-transfer-counters.patch`, targeting the pinned ZPC revision above. It adds opt-in process-wide atomic byte/call counters for explicit HtoD, DtoH, and DtoD copy functions, plus a small snapshot/reset header. It deliberately does not add synchronization.
 
 Application instructions and limitations are in `patches/zpc/README.md`. The patch is staged as a reviewable artifact in this Zeno branch; it has not been applied to the upstream ZPC repository or compiled. The Zeno submodule pointer and URL remain unchanged until the patch is tested in a ZPC fork.
+
+### ZPC fork implementation — review pending
+
+The opt-in transfer profiler has now been implemented in the companion fork:
+- Repository: https://github.com/brucelee1985666-commits/zpc
+- Branch: `aether/transfer-profiler`
+- Commit: `523eef8b97ffd2f630847676ff9968ba163ee18f`
+- Draft PR: https://github.com/brucelee1985666-commits/zpc/pull/1
+
+The fork implementation instruments both device-memory and managed-memory explicit copy wrappers. It records requested bytes and call counts for HtoD, DtoH, DtoD, and generic copies, with generic copies kept unclassified. CMake option `ZS_ENABLE_TRANSFER_PROFILER` defaults to OFF.
+
+The Zeno submodule URL and gitlink are intentionally unchanged while the ZPC PR is under review. After the patch is accepted and built against the pinned toolchain, update the submodule URL/pointer to the reviewed fork commit and expose the snapshot API through Zeno's diagnostics. No CUDA build or runtime validation has been performed yet.
