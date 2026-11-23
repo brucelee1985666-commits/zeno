@@ -161,8 +161,10 @@ ZENO_API void Graph::applyNodes(std::set<std::string> const &ids) {
         entry.estimatedCriticalPathMilliseconds = estimateCriticalPath(id);
         entry.historicalSamples = sampleCache[id];
         entry.reason = entry.historicalSamples
-            ? "ordered by confidence-weighted historical EWMA plus longest known dependency path"
-            : "no root timing history; stable ties retain deterministic input order";
+            ? "root ordered by confidence-weighted historical EWMA plus longest known dependency path"
+            : (entry.estimatedCriticalPathMilliseconds > 0.0
+                ? "root has no history; known dependency history contributes to the path estimate"
+                : "no timing history; stable ties retain deterministic input order");
         scheduledRoots.emplace_back(std::move(entry));
     }
 
