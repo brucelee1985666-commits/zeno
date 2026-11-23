@@ -37,8 +37,10 @@ transforms and non-finite output coordinates. A dedicated smoke test checks
 translation, normal handling, output isolation, and singular-scale rejection.
 
 This is an opt-in building block, not an automatic scheduler integration: a
-caller must identify the node, provide the callback in the work map, and invoke
-the prepared Taskflow runner. Legacy graph execution remains unchanged.
+caller can use `makeAetherOldzenbasePreparedWorkForPlan()` to map each planned
+node to one of the reviewed callbacks, then invoke the prepared Taskflow runner.
+The dispatcher rejects incomplete/unsafe plans, missing nodes, and unknown node
+types; it never falls back to arbitrary `INode::apply()`. Legacy graph execution remains unchanged.
 
 ## Implemented second adapter: GeoVertexVel
 
