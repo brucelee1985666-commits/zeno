@@ -86,10 +86,31 @@ private:
 };
 
 
+struct AetherNodeCostEstimate {
+    double meanApplyMilliseconds = 0.0;
+    std::uint64_t samples = 0;
+    double confidence = 0.0;
+};
+
+struct AetherScheduleEntry {
+    std::string node;
+    double estimatedCriticalPathMilliseconds = 0.0;
+    std::uint64_t historicalSamples = 0;
+    std::string reason;
+};
+
+ZENO_API AetherNodeCostEstimate getAetherNodeCostEstimate(
+    const std::string &nodeName);
+ZENO_API void recordAetherScheduleOrder(
+    const std::vector<AetherScheduleEntry> &entries);
+ZENO_API std::vector<AetherScheduleEntry> getAetherScheduleOrder();
+ZENO_API void resetAetherScheduleOrder();
+
 struct AetherExecutionReport {
     std::uint64_t executionId = 0;
     std::vector<NodeExecutionProfile> nodes;
     std::vector<GpuKernelExecutionProfile> gpuKernels;
+    std::vector<AetherScheduleEntry> schedule;
     GpuTransferExecutionProfile gpuTransfers;
     double totalNodeApplyMilliseconds = 0.0;
     double totalDependencyResolutionMilliseconds = 0.0;
