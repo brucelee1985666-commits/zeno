@@ -56,18 +56,26 @@ invocation-owned output maps.
 
 ## Remaining engineering gates
 
-1. Obtain a successful remote CI run for both the default-off core build and
-   the Taskflow 3.11 configure/build/CTest matrix. The dispatcher integration
-   smoke test is now registered and covers producer/consumer dependencies,
+1. Obtain a successful remote CI run for the default-off core build and the
+   Taskflow 3.11 configure/build/CTest matrix. The registered dispatcher
+   integration test covers producer/consumer dependencies, fan-out consumers,
    muted outputs, graph-output isolation, and stale-plan rejection.
-2. Run race-sanitizer or equivalent stress tests on a supported environment;
-   the current CPU CI does not prove absence of data races.
-3. Complete a focused object-lifetime and aliasing review across multiple
-   callbacks. `zany` snapshots hold shared pointers and are not deep copies;
-   callback inputs must remain read-only and outputs invocation-owned.
+2. The workflow now includes a ThreadSanitizer job for the dispatcher
+   integration test. Its graph has two concurrent consumers and repeats the
+   prepared execution 32 times. A successful sanitizer run is still required;
+   this focused test cannot prove race freedom for all Zeno graphs or callbacks.
+3. Static aliasing review: the four reviewed adapters read their input
+   objects and allocate invocation-owned output objects. The prepared snapshot
+   itself is shallow: `zany` values may retain shared pointers. Therefore the
+   executor does not make arbitrary inputs immutable; safety depends on the
+   reviewed callbacks treating those objects as read-only. The fan-out smoke
+   test verifies that the current two consumers do not mutate their shared
+   particle input. Broader alias/lifetime coverage remains a release gate.
 4. Benchmark representative graphs against the legacy executor before
-   enabling any automatic scheduling. There is currently no automatic routing
-   and no performance claim.
+   enabling automatic scheduling. Record graph shape, node count, input sizes,
+   CPU/thread configuration, warm-up count, median and p95 wall time, and
+   output equivalence. Do not infer speedup from the CPU smoke tests. There is
+   currently no automatic routing and no performance claim.
 
 ## Current limitations
 
