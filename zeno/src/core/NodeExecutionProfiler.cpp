@@ -310,7 +310,7 @@ AetherExecutionReport getAetherExecutionReport() {
     AetherExecutionReport report;
     report.executionId = activeExecutionId().load(std::memory_order_relaxed);
 #ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
-    report.schedulerMode = "history_critical_path_root_order";
+    report.schedulerMode = "history_critical_path_advisory";
 #else
     report.schedulerMode = "legacy_input_order";
 #endif
@@ -369,7 +369,7 @@ AetherExecutionReport getAetherExecutionReport() {
 
 #ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
     report.findings.emplace_back(
-        "Smart scheduler reorders only requested graph roots using historical CPU apply EWMA and the longest known dependency path; dependencies remain on the existing recursive execution path.");
+        "Smart scheduler computes a suggested order for requested graph roots using historical CPU apply EWMA and the longest known dependency path. Execution remains in legacy order because node purity and side-effect safety are not declared.");
     report.findings.emplace_back(
         "CPU/CUDA backend dispatch and transfer elimination remain disabled: node-level backend capability and data-residency contracts are not yet available.");
 #else
