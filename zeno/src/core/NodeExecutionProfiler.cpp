@@ -197,6 +197,20 @@ AetherNodeCostEstimate getAetherNodeCostEstimate(const std::string &nodeName, co
     return estimate;
 }
 
+void clearAetherNodeCostHistory(const void *graphIdentity) {
+    std::ostringstream prefix;
+    prefix << reinterpret_cast<std::uintptr_t>(graphIdentity) << ':';
+    const std::string keyPrefix = prefix.str();
+    std::lock_guard<std::mutex> lock(profileMutex());
+    auto &history = historicalProfileData();
+    for (auto it = history.begin(); it != history.end();) {
+        if (it->first.compare(0, keyPrefix.size(), keyPrefix) == 0)
+            it = history.erase(it);
+        else
+            ++it;
+    }
+}
+
 void recordAetherScheduleOrder(const std::vector<AetherScheduleEntry> &entries) {
     std::lock_guard<std::mutex> lock(profileMutex());
     auto &schedule = scheduleOrderData();
