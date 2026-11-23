@@ -13,8 +13,6 @@ struct Aggregate {
     std::uint64_t failures = 0;
     double totalMilliseconds = 0.0;
     double maximumMilliseconds = 0.0;
-    std::uint64_t dependencyEdges = 0;
-    double dependencyResolutionMilliseconds = 0.0;
 };
 
 std::mutex &profileMutex() {
@@ -65,8 +63,6 @@ std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
             row.averageMilliseconds = row.calls
                 ? row.totalMilliseconds / static_cast<double>(row.calls) : 0.0;
             row.maximumMilliseconds = item.second.maximumMilliseconds;
-            row.dependencyEdges = item.second.dependencyEdges;
-            row.dependencyResolutionMilliseconds = item.second.dependencyResolutionMilliseconds;
             result.emplace_back(std::move(row));
         }
     }
@@ -75,15 +71,6 @@ std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
             return a.totalMilliseconds > b.totalMilliseconds;
         });
     return result;
-}
-
-void recordNodeDependencyResolution(const std::string &node,
-                                    std::uint64_t dependencyEdges,
-                                    double elapsedMilliseconds) {
-    std::lock_guard<std::mutex> lock(profileMutex());
-    auto &entry = profileData()[node];
-    entry.dependencyEdges += dependencyEdges;
-    entry.dependencyResolutionMilliseconds += elapsedMilliseconds;
 }
 
 void resetNodeExecutionProfile() {
@@ -125,17 +112,6 @@ std::vector<GpuKernelExecutionProfile> getGpuKernelExecutionProfile() {
 void resetGpuKernelExecutionProfile() {
     std::lock_guard<std::mutex> lock(profileMutex());
     gpuProfileData().clear();
-}
-
-NodeDependencyProfileScope::NodeDependencyProfileScope(
-    std::string node, std::uint64_t edges)
-    : nodeName(std::move(node)), dependencyEdges(edges),
-      started(std::chrono::steady_clock::now()) {}
-
-NodeDependencyProfileScope::~NodeDependencyProfileScope() {
-    const auto elapsed = std::chrono::duration<double, std::milli>(
-        std::chrono::steady_clock::now() - started).count();
-    recordNodeDependencyResolution(nodeName, dependencyEdges, elapsed);
 }
 
 NodeExecutionProfileScope::NodeExecutionProfileScope(std::string node)
