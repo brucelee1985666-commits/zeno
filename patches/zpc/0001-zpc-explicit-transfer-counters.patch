@@ -3,9 +3,10 @@ new file mode 100644
 index 0000000..1111111
 --- /dev/null
 +++ b/include/zensim/cuda/memory/TransferProfiler.hpp
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,63 @@
 +#pragma once
 +
++#include <cstddef>
 +#include <atomic>
 +#include <cstdint>
 +
@@ -71,7 +72,7 @@ diff --git a/include/zensim/cuda/memory/MemOps.cpp b/include/zensim/cuda/memory/
 index 2222222..3333333 100644
 --- a/include/zensim/cuda/memory/MemOps.cpp
 +++ b/include/zensim/cuda/memory/MemOps.cpp
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,8 @@
  #include "MemOps.hpp"
  
  #include <cuda.h>
@@ -79,7 +80,7 @@ index 2222222..3333333 100644
  
  #include <iostream>
  
-@@ -85,18 +86,30 @@
+@@ -85,19 +87,31 @@
    }
    void copy(device_mem_tag, void *dst, void *src, size_t size, const source_location &loc) {
      /// @note
@@ -111,7 +112,7 @@ index 2222222..3333333 100644
 +#endif
      // cudaDeviceSynchronize();
    }
-@@ -165,12 +178,24 @@
+@@ -165,13 +179,25 @@
    }
    void copy(um_mem_tag, void *dst, void *src, size_t size, const source_location &loc) {
      cuMemcpy((CUdeviceptr)dst, (CUdeviceptr)src, size);
