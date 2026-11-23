@@ -25,6 +25,7 @@ std::unique_ptr<zeno::INode> makeNode(
 
 std::shared_ptr<zeno::PrimitiveObject> makePrimitive(float x) {
     auto primitive = std::make_shared<zeno::PrimitiveObject>();
+    primitive->verts.emplace_back(x, 2.0f, 3.0f);
     auto &positions = primitive->add_attr<zeno::vec3f>("pos");
     positions.emplace_back(x, 2.0f, 3.0f);
     auto &velocities = primitive->add_attr<zeno::vec3f>("vel");
@@ -78,7 +79,8 @@ int main() {
     graph.nodes.at("consumer")->inputBounds["pars"] = {"missing-node", "pars"};
     bool stalePlanRejected = false;
     try {
-        (void)zeno::makeAetherOldzenbasePreparedWorkForPlan(graph, plan);
+        const auto staleWork = zeno::makeAetherOldzenbasePreparedWorkForPlan(graph, plan);
+        (void)zeno::executeAetherPreparedPlanTaskflow(graph, plan, staleWork);
     } catch (std::invalid_argument const &) {
         stalePlanRejected = true;
     }
