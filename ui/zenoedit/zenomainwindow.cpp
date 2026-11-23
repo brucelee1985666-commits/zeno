@@ -176,6 +176,57 @@ void ZenoMainWindow::initMenu()
  */
     setActionProperty();
 
+#ifdef ZENO_MULTIPROCESS
+    QAction *aetherDiagnosticsAction =
+        m_ui->menuTools->addAction(tr("Aether Execution Diagnostics..."));
+    connect(aetherDiagnosticsAction, &QAction::triggered, this, [this]() {
+        const std::string report = getLatestAetherExecutionReportJson();
+        if (report.empty()) {
+            QMessageBox::information(this, tr("Aether Diagnostics"),
+                tr("No Aether report has arrived yet. Run a graph with "
+                   "ZENO_AETHER_ENABLE_PROFILER=ON to collect diagnostics."));
+            return;
+        }
+
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Aether Execution Diagnostics"));
+        dialog.resize(820, 620);
+        auto *layout = new QVBoxLayout(&dialog);
+        auto *editor = new QPlainTextEdit(&dialog);
+        editor->setReadOnly(true);
+        editor->setLineWrapMode(QPlainTextEdit::NoWrap);
+        editor->setPlainText(QString::fromStdString(report));
+        layout->addWidget(editor);
+
+        auto *buttons = new QHBoxLayout();
+        auto *saveButton = new QPushButton(tr("Save JSON..."), &dialog);
+        auto *closeButton = new QPushButton(tr("Close"), &dialog);
+        buttons->addStretch();
+        buttons->addWidget(saveButton);
+        buttons->addWidget(closeButton);
+        layout->addLayout(buttons);
+
+        connect(saveButton, &QPushButton::clicked, &dialog, [&dialog, editor]() {
+            const QString path = QFileDialog::getSaveFileName(
+                &dialog, QObject::tr("Save Aether Diagnostics"),
+                "aether-execution-report.json",
+                QObject::tr("JSON files (*.json)"));
+            if (path.isEmpty()) return;
+            QFile file(path);
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                QMessageBox::warning(&dialog, QObject::tr("Save failed"),
+                    QObject::tr("Could not write the selected file."));
+                return;
+            }
+            const QByteArray bytes = editor->toPlainText().toUtf8();
+            file.write(bytes);
+            file.close();
+        });
+        connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+        dialog.exec();
+    });
+#endif
+
     QSettings settings(zsCompanyName, zsEditor);
     QVariant use_chinese = settings.value("use_chinese");
     m_ui->actionEnglish_Chinese->setChecked(use_chinese.isNull() || use_chinese.toBool());
