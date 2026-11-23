@@ -77,13 +77,12 @@ prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan
 
     std::map<std::string, AetherPreparedNodeInputs> prepared;
     for (const auto &entry : plan.nodes) {
-        const auto nodeIt = graph.nodes.find(entry.id);
-        const INode *node = nodeIt->second.get();
+        const INode *node = graph.nodes.at(entry.id).get();
         if (!node)
             throw std::invalid_argument("Aether graph contains a null node: " + entry.id);
         if (!node->kframes.empty() || !node->formulas.empty())
             throw std::invalid_argument(
-                "Aether static snapshot does not evaluate keyframes or formulas: " + entry.id);
+                "Aether static preparation does not evaluate keyframes or formulas: " + entry.id);
 
         AetherPreparedNodeInputs snapshot;
         snapshot.nodeId = entry.id;
@@ -94,8 +93,7 @@ prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan
             const auto &sourceNodeId = binding.second.first;
             const auto &sourceSocket = binding.second.second;
             const auto sourceIndex = plannedIndices.find(sourceNodeId);
-            if (plannedIds.find(sourceNodeId) == plannedIds.end() ||
-                sourceIndex == plannedIndices.end())
+            if (sourceIndex == plannedIndices.end())
                 throw std::invalid_argument(
                     "Aether plan omits upstream dependency " + sourceNodeId +
                     " required by " + entry.id);
@@ -104,22 +102,18 @@ prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan
                 throw std::invalid_argument(
                     "Aether plan is stale: dependency edge is missing for " +
                     sourceNodeId + " -> " + entry.id);
+
             const auto sourceIt = graph.nodes.find(sourceNodeId);
             if (sourceIt == graph.nodes.end() || !sourceIt->second)
                 throw std::invalid_argument("Aether upstream node is unavailable: " + sourceNodeId);
 
-            zany value;
-            if (sourceIt->second->muted_output) {
-                value = sourceIt->second->muted_output;
-            } else {
-                const auto outputIt = sourceIt->second->outputs.find(sourceSocket);
-                if (outputIt == sourceIt->second->outputs.end() || !outputIt->second)
-                    throw std::invalid_argument(
-                        "Aether upstream output is not materialized: " +
-                        sourceNodeId + "." + sourceSocket);
-                value = outputIt->second;
-            }
-            snapshot.values[socket] = std::move(value);
+            AetherPreparedInputBinding preparedBinding;
+            preparedBinding.socket = socket;
+            preparedBinding.sourceNode = sourceNodeId;
+            preparedBinding.sourceSocket = sourceSocket;
+            preparedBinding.sourceNodeIndex = sourceIndex->second;
+            preparedBinding.mutedSourceOutput = sourceIt->second->muted_output;
+            snapshot.bindings.emplace_back(std::move(preparedBinding));
         }
 
         prepared.emplace(entry.id, std::move(snapshot));
@@ -128,14 +122,18 @@ prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan
 }
 
 #ifdef ZENO_AETHER_ENABLE_TASKFLOW
-void executeAetherPreparedPlanTaskflow(
+std::map<std::string, std::map<std::string, zany>>
+executeAetherPreparedPlanTaskflow(
     Graph const &graph,
     AetherExecutionPlan const &plan,
     std::map<std::string, AetherPreparedNodeWork> const &preparedWork) {
     const auto preparedInputs = prepareAetherExecutionInputs(graph, plan);
+    std::vector<std::map<std::string, zany>> outputSlots(plan.nodes.size());
     std::map<std::string, std::function<void()>> callbacks;
 
-    for (const auto &entry : plan.nodes) {
+    // Validate every callback before scheduling any task.
+    for (std::size_t index = 0; index < plan.nodes.size(); ++index) {
+        const auto &entry = plan.nodes[index];
         const auto workIt = preparedWork.find(entry.id);
         if (workIt == preparedWork.end() || !workIt->second)
             throw std::invalid_argument(
@@ -144,12 +142,66 @@ void executeAetherPreparedPlanTaskflow(
         if (inputIt == preparedInputs.end())
             throw std::logic_error("Aether prepared input snapshot is missing: " + entry.id);
 
-        const auto *inputs = &inputIt->second;
+        const auto *staticInputs = &inputIt->second;
         const auto *work = &workIt->second;
-        callbacks.emplace(entry.id, [inputs, work] { (*work)(*inputs); });
+        auto *allOutputs = &outputSlots;
+        callbacks.emplace(entry.id, [staticInputs, work, allOutputs] {
+            AetherPreparedNodeInputs runtimeInputs = *staticInputs;
+            for (const auto &binding : runtimeInputs.bindings) {
+                zany value = binding.mutedSourceOutput;
+                if (!value) {
+                    const auto &sourceOutputs = allOutputs->at(binding.sourceNodeIndex);
+                    const auto outputIt = sourceOutputs.find(binding.sourceSocket);
+                    if (outputIt == sourceOutputs.end() || !outputIt->second)
+                        throw std::runtime_error(
+                            "Aether task did not produce required output " +
+                            binding.sourceNode + "." + binding.sourceSocket);
+                    value = outputIt->second;
+                }
+                runtimeInputs.values[binding.socket] = std::move(value);
+            }
+            (*allOutputs)[staticInputs->nodeId.empty() ? 0 :
+                static_cast<std::size_t>(std::distance(
+                    allOutputs->begin(), allOutputs->begin()))] = {};
+            // The task owns one output slot. Its index is captured below by the
+            // stable plan order; no two tasks write the same slot.
+            (*work)(runtimeInputs);
+        });
+    }
+
+    // Replace the placeholder callbacks with indexed writers. The explicit
+    // wrapper keeps each producer's output map separate from all other tasks.
+    callbacks.clear();
+    for (std::size_t index = 0; index < plan.nodes.size(); ++index) {
+        const auto &entry = plan.nodes[index];
+        const auto *staticInputs = &preparedInputs.at(entry.id);
+        const auto *work = &preparedWork.at(entry.id);
+        auto *allOutputs = &outputSlots;
+        callbacks.emplace(entry.id, [staticInputs, work, allOutputs, index] {
+            AetherPreparedNodeInputs runtimeInputs = *staticInputs;
+            for (const auto &binding : runtimeInputs.bindings) {
+                zany value = binding.mutedSourceOutput;
+                if (!value) {
+                    const auto &sourceOutputs = allOutputs->at(binding.sourceNodeIndex);
+                    const auto outputIt = sourceOutputs.find(binding.sourceSocket);
+                    if (outputIt == sourceOutputs.end() || !outputIt->second)
+                        throw std::runtime_error(
+                            "Aether task did not produce required output " +
+                            binding.sourceNode + "." + binding.sourceSocket);
+                    value = outputIt->second;
+                }
+                runtimeInputs.values[binding.socket] = std::move(value);
+            }
+            (*allOutputs)[index] = (*work)(runtimeInputs);
+        });
     }
 
     executeAetherExecutionPlanTaskflow(plan, callbacks);
+
+    std::map<std::string, std::map<std::string, zany>> result;
+    for (std::size_t index = 0; index < plan.nodes.size(); ++index)
+        result.emplace(plan.nodes[index].id, std::move(outputSlots[index]));
+    return result;
 }
 #endif
 
