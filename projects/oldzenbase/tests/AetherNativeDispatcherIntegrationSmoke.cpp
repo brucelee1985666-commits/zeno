@@ -36,8 +36,9 @@ int main() {
     zeno::Graph graph;
     graph.session = &session;
 
+    auto sourcePrimitive = makePrimitive(1.0f);
     auto producer = makeNode(session, graph, "PrimitiveToParticles", "producer");
-    producer->inputs["prim"] = makePrimitive(1.0f);
+    producer->inputs["prim"] = sourcePrimitive;
     graph.nodes.emplace("producer", std::move(producer));
 
     auto consumer = makeNode(session, graph, "ParticlesToPrimitive", "consumer");
@@ -55,6 +56,10 @@ int main() {
     assert(result && result->size() == 1);
     assert(std::abs(result->attr<zeno::vec3f>("pos")[0][0] - 1.0f) < 1.0e-5f);
     assert(std::abs(result->attr<zeno::vec3f>("vel")[0][1] - 1.0f) < 1.0e-5f);
+    // Both conversion callbacks allocate outputs and leave shared source objects untouched.
+    assert(sourcePrimitive->size() == 1);
+    assert(std::abs(sourcePrimitive->verts[0][0] - 1.0f) < 1.0e-5f);
+    assert(std::abs(sourcePrimitive->attr<zeno::vec3f>("vel")[0][1] - 1.0f) < 1.0e-5f);
 
     // Muted producer output must override the callback's produced value.
     auto mutedParticles = std::make_shared<zeno::ParticlesObject>();
@@ -67,6 +72,9 @@ int main() {
     assert(mutedResult && mutedResult->size() == 1);
     assert(std::abs(mutedResult->attr<zeno::vec3f>("pos")[0][0] - 9.0f) < 1.0e-5f);
     assert(std::abs(mutedResult->attr<zeno::vec3f>("vel")[0][2] - 1.0f) < 1.0e-5f);
+    assert(mutedParticles->pos.size() == 1 && mutedParticles->vel.size() == 1);
+    assert(std::abs(mutedParticles->pos[0].x - 9.0f) < 1.0e-5f);
+    assert(std::abs(mutedParticles->vel[0].z - 1.0f) < 1.0e-5f);
 
     // The explicit dispatcher and executor never write into legacy node outputs.
     assert(graph.nodes.at("producer")->outputs.empty());
