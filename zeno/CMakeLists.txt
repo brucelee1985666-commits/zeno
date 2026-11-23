@@ -89,6 +89,10 @@ if (ZENO_AETHER_BUILD_CAPABILITY_TESTS)
     add_executable(zeno_aether_capability_smoke tests/AetherExecutionPlanSmoke.cpp)
     target_link_libraries(zeno_aether_capability_smoke PRIVATE zeno)
     add_test(NAME zeno_aether_capability_smoke COMMAND zeno_aether_capability_smoke)
+
+    add_executable(zeno_aether_prepared_inputs_smoke tests/AetherPreparedExecutionSmoke.cpp)
+    target_link_libraries(zeno_aether_prepared_inputs_smoke PRIVATE zeno)
+    add_test(NAME zeno_aether_prepared_inputs_smoke COMMAND zeno_aether_prepared_inputs_smoke)
 endif()
 
 if (ZENO_AETHER_ENABLE_TASKFLOW AND ZENO_AETHER_BUILD_TASKFLOW_BENCHMARKS)
