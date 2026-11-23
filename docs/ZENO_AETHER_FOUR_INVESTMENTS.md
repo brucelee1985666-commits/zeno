@@ -109,3 +109,8 @@ The implementations use CUDA Driver API calls such as cuMemcpyHtoD, cuMemcpyDtoH
 ZPC is a pinned Git submodule, not source owned by this repository's current tree. Editing its files as ordinary Zeno files would not create a durable parent-repository change. The correct implementation is a compatible ZPC fork or upstreamable patch adding opt-in, thread-safe counters for HtoD, DtoH, DtoD, and generic device copies, preserving the existing API and default behavior; then update the Zeno submodule pointer to that reviewed revision. Do not silently change the submodule URL or claim complete transfer coverage before this boundary is resolved.
 
 Status: source paths mapped; transfer counters not implemented; no build or runtime measurement performed. This audit is a prerequisite, not a fabricated profiler result.
+## ZPC transfer-profiler patch prepared
+
+A patch artifact is now included at `patches/zpc/0001-zpc-explicit-transfer-counters.patch`, targeting the pinned ZPC revision above. It adds opt-in process-wide atomic byte/call counters for explicit HtoD, DtoH, and DtoD copy functions, plus a small snapshot/reset header. It deliberately does not add synchronization.
+
+Application instructions and limitations are in `patches/zpc/README.md`. The patch is staged as a reviewable artifact in this Zeno branch; it has not been applied to the upstream ZPC repository or compiled. The Zeno submodule pointer and URL remain unchanged until the patch is tested in a ZPC fork.
