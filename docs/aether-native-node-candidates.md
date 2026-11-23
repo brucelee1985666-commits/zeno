@@ -1,7 +1,7 @@
 # Aether native-node parallelization candidates
 
-Status: first native adapter implemented for `TransformMesh` in the optional
-`oldzenbase` extension. It is callable only through the prepared-callback API;
+Status: native prepared-callback adapters implemented for `TransformMesh` and
+`GeoVertexVel` in the optional `oldzenbase` extension. It is callable only through the prepared-callback API;
 ordinary `INode::apply()` is not routed through Taskflow.
 
 ## Safety gate
@@ -38,6 +38,18 @@ translation, normal handling, output isolation, and singular-scale rejection.
 This is an opt-in building block, not an automatic scheduler integration: a
 caller must identify the node, provide the callback in the work map, and invoke
 the prepared Taskflow runner. Legacy graph execution remains unchanged.
+
+## Implemented second adapter: GeoVertexVel
+
+`projects/oldzenbase/mesh/PolyVelocity.cpp` now provides a pure helper shared by
+legacy `apply()` and the prepared callback. It validates all three inputs,
+requires finite non-zero `dt` and matching mesh vertex counts, rejects
+non-finite velocities, and returns a fresh `ParticlesObject` without mutating
+either input mesh. Its CPU capability contract is opt-in and a dedicated
+Taskflow smoke test checks the velocity result, graph-output isolation, zero
+`dt`, and mismatched vertex counts. As with `TransformMesh`, this is an
+explicit callback building block; it does not route normal graph execution
+through Taskflow.
 
 ## Remaining candidates from the legacy oldzenbase extension
 
@@ -79,9 +91,9 @@ race testing or object-lifetime review.
 
 ## Current limitations
 
-- `TransformMesh` is the only production node in this extension that currently
-overrides `getAetherExecutionCapabilities()` for the Aether CPU contract; all
-other nodes retain the conservative default.
+- `TransformMesh` and `GeoVertexVel` are the only production nodes in this extension
+that currently override `getAetherExecutionCapabilities()` for the Aether CPU
+contract; all other nodes retain the conservative default.
 - `oldzenbase` is optional and categorized as deprecated.
 - The Taskflow prepared callback bridge is a prototype, not an integration
   replacement for `Graph::applyNodes`.
