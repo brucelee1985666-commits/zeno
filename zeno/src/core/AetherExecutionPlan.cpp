@@ -15,6 +15,11 @@ namespace {
 
 enum class VisitState { Unseen, Visiting, Complete };
 
+bool writesResource(AetherResourceAccessMode mode) {
+    return mode == AetherResourceAccessMode::Write ||
+           mode == AetherResourceAccessMode::ReadWrite;
+}
+
 void addCapabilityBlockers(AetherExecutionPlanNode &entry) {
     const auto &caps = entry.capabilities;
     if (!caps.cpuThreadSafe) entry.blockers.emplace_back("CPU thread safety not declared");
@@ -78,12 +83,54 @@ AetherExecutionPlan buildAetherExecutionPlan(
             plan.dependencyEdges.emplace_back(from->second, to->second);
     }
 
+    // Conflicting accesses to a shared resource must be ordered by dataflow.
+    const std::size_t count = plan.nodes.size();
+    std::vector<std::vector<std::size_t>> adjacency(count);
+    for (const auto &edge : plan.dependencyEdges)
+        adjacency[edge.first].push_back(edge.second);
+
+    const auto hasPath = [&](std::size_t from, std::size_t to) {
+        std::vector<bool> seen(count, false);
+        std::vector<std::size_t> stack{from};
+        while (!stack.empty()) {
+            const auto current = stack.back();
+            stack.pop_back();
+            if (current == to) return true;
+            if (seen[current]) continue;
+            seen[current] = true;
+            for (const auto next : adjacency[current]) stack.push_back(next);
+        }
+        return false;
+    };
+
+    for (std::size_t i = 0; i < count; ++i) {
+        for (std::size_t j = i + 1; j < count; ++j) {
+            for (const auto &left : plan.nodes[i].capabilities.resources) {
+                if (left.resource.empty()) continue;
+                for (const auto &right : plan.nodes[j].capabilities.resources) {
+                    if (left.resource != right.resource ||
+                        (!writesResource(left.mode) && !writesResource(right.mode)))
+                        continue;
+                    if (!hasPath(i, j) && !hasPath(j, i)) {
+                        plan.unorderedResourceHazards.push_back(
+                            {plan.nodes[i].id, plan.nodes[j].id, left.resource});
+                        plan.nodes[i].blockers.emplace_back(
+                            "unordered conflicting access to resource: " + left.resource);
+                        plan.nodes[j].blockers.emplace_back(
+                            "unordered conflicting access to resource: " + left.resource);
+                    }
+                }
+            }
+        }
+    }
+
+    const bool noResourceHazards = plan.unorderedResourceHazards.empty();
     plan.allNodesCpuParallelSafe = !plan.nodes.empty() &&
-        !plan.hasMissingNodes && !plan.hasDependencyCycle &&
+        !plan.hasMissingNodes && !plan.hasDependencyCycle && noResourceHazards &&
         std::all_of(plan.nodes.begin(), plan.nodes.end(),
             [](const AetherExecutionPlanNode &node) { return node.cpuParallelSafe; });
     plan.allNodesCudaReady = !plan.nodes.empty() &&
-        !plan.hasMissingNodes && !plan.hasDependencyCycle &&
+        !plan.hasMissingNodes && !plan.hasDependencyCycle && noResourceHazards &&
         std::all_of(plan.nodes.begin(), plan.nodes.end(),
             [](const AetherExecutionPlanNode &node) { return node.cudaDispatchReady; });
     return plan;
