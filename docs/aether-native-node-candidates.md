@@ -1,7 +1,8 @@
 # Aether native-node parallelization candidates
 
 Status: native prepared-callback adapters implemented for `TransformMesh`,
-`GeoVertexVel`, and `PrimitiveToParticles` in the optional `oldzenbase` extension. It is callable only through the prepared-callback API;
+`GeoVertexVel`, `PrimitiveToParticles`, and `ParticlesToPrimitive` in the optional
+`oldzenbase` extension. It is callable only through the prepared-callback API;
 ordinary `INode::apply()` is not routed through Taskflow.
 
 ## Safety gate
@@ -61,6 +62,17 @@ The callback reads the source primitive and returns a fresh `ParticlesObject`.
 Its smoke test covers position/velocity conversion, absent-velocity defaults,
 malformed attribute lengths, and graph-output isolation.
 
+## Implemented fourth adapter: ParticlesToPrimitive
+
+`projects/oldzenbase/pars/ParticlesToPrimitive.cpp` now requires matching
+position and velocity counts before conversion. It creates a new primitive,
+resizes its base position storage and velocity attribute to the same count,
+and writes every element, avoiding the legacy behavior that resized to the
+maximum of two potentially unequal arrays and left gaps uninitialized. The
+prepared callback returns only the newly owned primitive. Its smoke test
+checks converted attributes, graph-output isolation, and rejection of
+mismatched arrays.
+
 ## Remaining candidates from the legacy oldzenbase extension
 
 These are candidates for follow-up adapters, not approved opt-ins yet.
@@ -101,9 +113,10 @@ race testing or object-lifetime review.
 
 ## Current limitations
 
-- `TransformMesh`, `GeoVertexVel`, and `PrimitiveToParticles` are the only production
-nodes in this extension that currently override `getAetherExecutionCapabilities()`
-for the Aether CPU contract; all other nodes retain the conservative default.
+- `TransformMesh`, `GeoVertexVel`, `PrimitiveToParticles`, and `ParticlesToPrimitive`
+are the only production nodes in this extension that currently override
+`getAetherExecutionCapabilities()` for the Aether CPU contract; all other nodes
+retain the conservative default.
 - `oldzenbase` is optional and categorized as deprecated.
 - The Taskflow prepared callback bridge is a prototype, not an integration
   replacement for `Graph::applyNodes`.
