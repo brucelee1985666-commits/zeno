@@ -132,46 +132,15 @@ executeAetherPreparedPlanTaskflow(
     std::map<std::string, std::function<void()>> callbacks;
 
     // Validate every callback before scheduling any task.
-    for (std::size_t index = 0; index < plan.nodes.size(); ++index) {
-        const auto &entry = plan.nodes[index];
+    for (const auto &entry : plan.nodes) {
         const auto workIt = preparedWork.find(entry.id);
         if (workIt == preparedWork.end() || !workIt->second)
             throw std::invalid_argument(
                 "Aether prepared callback is missing for node: " + entry.id);
-        const auto inputIt = preparedInputs.find(entry.id);
-        if (inputIt == preparedInputs.end())
-            throw std::logic_error("Aether prepared input snapshot is missing: " + entry.id);
-
-        const auto *staticInputs = &inputIt->second;
-        const auto *work = &workIt->second;
-        auto *allOutputs = &outputSlots;
-        callbacks.emplace(entry.id, [staticInputs, work, allOutputs] {
-            AetherPreparedNodeInputs runtimeInputs = *staticInputs;
-            for (const auto &binding : runtimeInputs.bindings) {
-                zany value = binding.mutedSourceOutput;
-                if (!value) {
-                    const auto &sourceOutputs = allOutputs->at(binding.sourceNodeIndex);
-                    const auto outputIt = sourceOutputs.find(binding.sourceSocket);
-                    if (outputIt == sourceOutputs.end() || !outputIt->second)
-                        throw std::runtime_error(
-                            "Aether task did not produce required output " +
-                            binding.sourceNode + "." + binding.sourceSocket);
-                    value = outputIt->second;
-                }
-                runtimeInputs.values[binding.socket] = std::move(value);
-            }
-            (*allOutputs)[staticInputs->nodeId.empty() ? 0 :
-                static_cast<std::size_t>(std::distance(
-                    allOutputs->begin(), allOutputs->begin()))] = {};
-            // The task owns one output slot. Its index is captured below by the
-            // stable plan order; no two tasks write the same slot.
-            (*work)(runtimeInputs);
-        });
     }
 
-    // Replace the placeholder callbacks with indexed writers. The explicit
-    // wrapper keeps each producer's output map separate from all other tasks.
-    callbacks.clear();
+    // Each task writes only its own output slot; dependency edges publish it
+    // to downstream tasks before they read it.
     for (std::size_t index = 0; index < plan.nodes.size(); ++index) {
         const auto &entry = plan.nodes[index];
         const auto *staticInputs = &preparedInputs.at(entry.id);
