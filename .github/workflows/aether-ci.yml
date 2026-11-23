@@ -2,9 +2,6 @@ name: Aether CPU CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - "aether/**"
   workflow_dispatch:
 
 permissions:
