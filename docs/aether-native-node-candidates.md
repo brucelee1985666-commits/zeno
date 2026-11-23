@@ -1,8 +1,8 @@
 # Aether native-node parallelization candidates
 
-Status: source-level inventory only. No production node is opted into parallel
-execution by this document, and no ordinary `INode::apply()` call is routed
-through Taskflow.
+Status: first native adapter implemented for `TransformMesh` in the optional
+`oldzenbase` extension. It is callable only through the prepared-callback API;
+ordinary `INode::apply()` is not routed through Taskflow.
 
 ## Safety gate
 
@@ -24,9 +24,24 @@ or `Graph::applyNode()`. A capability declaration alone therefore does not
 make a production node execute concurrently. A future native adapter must
 supply a reviewed per-node callback and preserve input/output ownership.
 
-## First candidates from the legacy oldzenbase extension
+## Implemented first adapter: TransformMesh
 
-These are candidates for a follow-up adapter, not approved opt-ins yet.
+`projects/oldzenbase/mesh/TransformMesh.cpp` now declares a conservative CPU
+capability contract and exposes `isAetherTransformMeshNode()` plus
+`makeAetherTransformMeshPreparedWork()`. The callback consumes the prepared
+input snapshot, reads the source mesh without modifying it, and returns a new
+mesh output. It does not call `INode::apply()` or write to the graph's output
+map. The shared transform implementation also rejects singular normal
+transforms and non-finite output coordinates. A dedicated smoke test checks
+translation, normal handling, output isolation, and singular-scale rejection.
+
+This is an opt-in building block, not an automatic scheduler integration: a
+caller must identify the node, provide the callback in the work map, and invoke
+the prepared Taskflow runner. Legacy graph execution remains unchanged.
+
+## Remaining candidates from the legacy oldzenbase extension
+
+These are candidates for follow-up adapters, not approved opt-ins yet.
 
 | Node | Source | Static assessment | Gate before opt-in |
 |---|---|---|---|
@@ -65,10 +80,12 @@ race testing or object-lifetime review.
 
 ## Current limitations
 
-- No production node currently overrides `getAetherExecutionCapabilities()`;
-  the default contract remains conservative.
+- `TransformMesh` is the only production node in this extension that currently
+overrides `getAetherExecutionCapabilities()` for the Aether CPU contract; all
+other nodes retain the conservative default.
 - `oldzenbase` is optional and categorized as deprecated.
 - The Taskflow prepared callback bridge is a prototype, not an integration
   replacement for `Graph::applyNodes`.
-- No C++ build, CTest, race sanitizer, runtime graph test, or benchmark result
-  is claimed by this inventory.
+- The TransformMesh smoke test is added to the remote CI matrix but has not yet
+  produced a passing run. No successful C++ build, CTest, race sanitizer,
+  full runtime graph test, or benchmark result is claimed by this inventory.
