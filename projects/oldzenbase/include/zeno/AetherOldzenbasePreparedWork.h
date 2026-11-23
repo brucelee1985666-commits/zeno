@@ -5,13 +5,15 @@
 
 namespace zeno {
 
-// Identifies the one legacy node with a reviewed prepared-callback adapter.
+// Identifies legacy nodes with reviewed prepared-callback adapters.
 bool isAetherTransformMeshNode(INode const &node) noexcept;
+bool isAetherGeoVertexVelNode(INode const &node) noexcept;
 
-// The callback reads prepared inputs only and returns a fresh MeshObject.
-// It never calls INode::apply() or mutates the input mesh.
+// Callbacks read prepared inputs only and return invocation-owned outputs.
+// They never call INode::apply() or mutate shared input objects.
 #ifdef ZENO_AETHER_ENABLE_TASKFLOW
 AetherPreparedNodeWork makeAetherTransformMeshPreparedWork();
+AetherPreparedNodeWork makeAetherGeoVertexVelPreparedWork();
 #endif
 
 } // namespace zeno
