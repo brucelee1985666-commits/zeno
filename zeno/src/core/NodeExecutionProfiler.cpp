@@ -36,6 +36,21 @@ std::unordered_map<std::string, Aggregate> &profileData() {
     return data;
 }
 
+struct HistoricalAggregate {
+    double meanApplyMilliseconds = 0.0;
+    std::uint64_t samples = 0;
+};
+
+std::unordered_map<std::string, HistoricalAggregate> &historicalProfileData() {
+    static std::unordered_map<std::string, HistoricalAggregate> data;
+    return data;
+}
+
+std::vector<AetherScheduleEntry> &scheduleOrderData() {
+    static std::vector<AetherScheduleEntry> data;
+    return data;
+}
+
 struct GpuAggregate {
     std::uint64_t calls = 0;
     double totalMilliseconds = 0.0;
@@ -118,6 +133,15 @@ void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bo
     if (failed) ++entry.failures;
     entry.totalMilliseconds += elapsedMilliseconds;
     entry.maximumMilliseconds = std::max(entry.maximumMilliseconds, elapsedMilliseconds);
+
+    // Keep a bounded-memory EWMA across graph executions. Current-run counters
+    // may be reset; historical estimates deliberately survive those resets.
+    auto &history = historicalProfileData()[node];
+    constexpr double alpha = 0.20;
+    history.meanApplyMilliseconds = history.samples == 0
+        ? elapsedMilliseconds
+        : alpha * elapsedMilliseconds + (1.0 - alpha) * history.meanApplyMilliseconds;
+    ++history.samples;
 }
 
 void recordNodeDependencyResolution(const std::string &node, std::uint64_t edges,
@@ -152,6 +176,34 @@ std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
             return a.totalMilliseconds > b.totalMilliseconds;
         });
     return result;
+}
+
+
+AetherNodeCostEstimate getAetherNodeCostEstimate(const std::string &nodeName) {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    AetherNodeCostEstimate estimate;
+    const auto it = historicalProfileData().find(nodeName);
+    if (it == historicalProfileData().end()) return estimate;
+    estimate.meanApplyMilliseconds = it->second.meanApplyMilliseconds;
+    estimate.samples = it->second.samples;
+    estimate.confidence = std::min(1.0,
+        static_cast<double>(estimate.samples) / 8.0);
+    return estimate;
+}
+
+void recordAetherScheduleOrder(const std::vector<AetherScheduleEntry> &entries) {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    scheduleOrderData() = entries;
+}
+
+std::vector<AetherScheduleEntry> getAetherScheduleOrder() {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    return scheduleOrderData();
+}
+
+void resetAetherScheduleOrder() {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    scheduleOrderData().clear();
 }
 
 void resetNodeExecutionProfile() {
@@ -220,6 +272,7 @@ AetherExecutionProfileScope::AetherExecutionProfileScope() {
         resetNodeExecutionProfile();
         resetGpuKernelExecutionProfile();
         resetGpuTransferExecutionProfile();
+        resetAetherScheduleOrder();
         activeExecutionId().store(
             executionSequence().fetch_add(1, std::memory_order_relaxed) + 1,
             std::memory_order_relaxed);
@@ -235,6 +288,7 @@ AetherExecutionReport getAetherExecutionReport() {
     report.executionId = activeExecutionId().load(std::memory_order_relaxed);
     report.nodes = getNodeExecutionProfile();
     report.gpuKernels = getGpuKernelExecutionProfile();
+    report.schedule = getAetherScheduleOrder();
     report.gpuTransfers = getGpuTransferExecutionProfile();
 
     for (auto const &node : report.nodes) {
