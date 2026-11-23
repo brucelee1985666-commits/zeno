@@ -94,8 +94,9 @@ history. The scheduler keeps a constant-space EWMA per observed node name for
 the process lifetime (alpha 0.20). At each graph application it estimates the
 critical path of each requested root as that node's historical mean apply time
 plus the longest known dependency path, then stably orders requested roots from
-highest estimated path to lowest. Unknown nodes receive a zero estimate and
-retain deterministic relative order. The existing recursive dependency
+highest estimated path to lowest. Estimates are confidence-weighted (confidence ramps to 1.0 over eight
+samples). Unknown nodes receive a zero own-node estimate; stable sorting keeps
+ties deterministic. The existing recursive dependency
 execution and visited-node reuse remain unchanged. The selected order and
 estimates are included in the execution report's `schedule` array, and
 `scheduler_mode` identifies the active policy.
