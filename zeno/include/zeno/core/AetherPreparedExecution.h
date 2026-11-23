@@ -7,30 +7,42 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace zeno {
 struct Graph;
 
-// A read-only-by-contract snapshot of values available before task dispatch.
-// zany values are shared object references; callbacks must not mutate them.
+struct AetherPreparedInputBinding {
+    std::string socket;
+    std::string sourceNode;
+    std::string sourceSocket;
+    std::size_t sourceNodeIndex = 0;
+    zany mutedSourceOutput;
+};
+
+// Static input values and immutable dependency metadata prepared before dispatch.
+// zany values are shared references; callbacks must treat input objects as read-only.
 struct AetherPreparedNodeInputs {
     std::string nodeId;
     std::map<std::string, zany> values;
+    std::vector<AetherPreparedInputBinding> bindings;
 };
 
-// Copies static values and binds already-materialized upstream outputs without
-// calling INode::requireInput/apply or modifying Graph, Context, or node maps.
-// Rejects dynamic keyframe/formula inputs and unavailable upstream outputs.
+// Copies static input values and dependency metadata without calling
+// INode::requireInput/apply or modifying Graph, Context, or node maps.
+// Rejects keyframe/formula inputs and stale/incomplete dependency plans.
 ZENO_API std::map<std::string, AetherPreparedNodeInputs>
 prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan);
 
 #ifdef ZENO_AETHER_ENABLE_TASKFLOW
 using AetherPreparedNodeWork =
-    std::function<void(AetherPreparedNodeInputs const &)>;
+    std::function<std::map<std::string, zany>(AetherPreparedNodeInputs const &)>;
 
-// Prepares all node inputs first, then dispatches the caller's specialized
-// callbacks through Taskflow while preserving the audited dependency edges.
-ZENO_API void executeAetherPreparedPlanTaskflow(
+// Runs specialized callbacks as a DAG. Each callback returns its own output map;
+// dependent callbacks receive those outputs only after Taskflow dependency completion.
+// This does not invoke INode::apply() or mutate the source Graph.
+ZENO_API std::map<std::string, std::map<std::string, zany>>
+executeAetherPreparedPlanTaskflow(
     Graph const &graph,
     AetherExecutionPlan const &plan,
     std::map<std::string, AetherPreparedNodeWork> const &preparedWork);
