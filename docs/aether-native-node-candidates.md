@@ -84,5 +84,7 @@ invocation-owned output maps.
 - `oldzenbase` is optional and deprecated.
 - The Taskflow prepared-callback bridge is an opt-in prototype, not a
   replacement for `Graph::applyNodes`.
-- The CPU CI does not validate CUDA/OptiX, editor/Qt integration, race
-  sanitizer behavior, production runtime semantics, or performance.
+- The CPU CI does not validate CUDA/OptiX, editor/Qt integration, full
+  production runtime semantics, or performance. The separate ThreadSanitizer
+  job covers only the focused dispatcher fan-out smoke graph, not all Zeno
+  nodes or arbitrary application graphs.
