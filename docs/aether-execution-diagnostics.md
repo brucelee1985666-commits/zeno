@@ -79,3 +79,37 @@ future scheduler, not as a scheduler or an optimization by itself.
 In multiprocess editor builds, the runner sends each completed graph-substep report to the editor. Open **Tools → Aether Execution Diagnostics** to inspect the latest JSON and save it to disk. The viewer compares node-apply time, instrumented GPU-kernel time, and explicit transfer bytes against the previous captured report. The typed API `compareAetherExecutionReports(baseline, candidate)` additionally returns per-node and per-kernel deltas for callers that retain typed snapshots.
 
 The UI comparison is against the previous captured report. When a timeline contains multiple substeps, this may be the preceding substep rather than a different scene or a controlled benchmark run.
+
+
+## Aether Smart Scheduler (experimental)
+
+Enable the history-based scheduler with:
+
+```sh
+-DZENO_AETHER_ENABLE_SMART_SCHEDULER=ON
+```
+
+This option also enables the CPU node profiler because scheduling needs timing
+history. The scheduler keeps a constant-space EWMA per observed node name for
+the process lifetime (alpha 0.20). At each graph application it estimates the
+critical path of each requested root as that node's historical mean apply time
+plus the longest known dependency path, then stably orders requested roots from
+highest estimated path to lowest. Unknown nodes receive a zero estimate and
+retain deterministic relative order. The existing recursive dependency
+execution and visited-node reuse remain unchanged. The selected order and
+estimates are included in the execution report's `schedule` array, and
+`scheduler_mode` identifies the active policy.
+
+This is deliberately a conservative first scheduler stage. It reorders
+independent requested roots; it does not execute nodes concurrently, move
+arbitrary node implementations between CPU and CUDA, fuse kernels, or
+automatically change data residency. Zeno's current `INode::apply()` contract
+does not expose a general dual-implementation/backend-capability interface,
+and aggregate CUDA/transfer counters are not yet attributable to individual
+nodes. Automatic CPU/GPU dispatch or transfer elimination without those
+contracts would be guesswork and is intentionally not enabled.
+
+The next safe extension requires explicit per-node backend capabilities,
+node-scoped GPU/transfer telemetry, and a data-residency/lifetime contract.
+Only then can the cost model compare CPU execution against CUDA execution plus
+the actual transfer cost and make a defensible dispatch decision.
