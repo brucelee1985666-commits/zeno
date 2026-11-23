@@ -27,8 +27,7 @@ std::shared_ptr<zeno::PrimitiveObject> makePrimitive(float x) {
     auto primitive = std::make_shared<zeno::PrimitiveObject>();
     // "pos" aliases verts.values in PrimitiveObject; do not append twice.
     primitive->verts.emplace_back(x, 2.0f, 3.0f);
-    auto &velocities = primitive->add_attr<zeno::vec3f>("vel");
-    velocities.emplace_back(0.0f, 1.0f, 0.0f);
+    primitive->add_attr<zeno::vec3f>("vel", zeno::vec3f{0.0f, 1.0f, 0.0f});
     return primitive;
 }
 }
