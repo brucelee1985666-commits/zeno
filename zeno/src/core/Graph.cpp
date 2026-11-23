@@ -55,6 +55,9 @@ zany Graph::getNodeInput(std::string const& sn, std::string const& ss) const {
 }
 
 ZENO_API void Graph::clearNodes() {
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+    clearAetherNodeCostHistory(this);
+#endif
     nodes.clear();
 }
 
@@ -173,9 +176,13 @@ ZENO_API void Graph::applyNodes(std::set<std::string> const &ids) {
             return a.estimatedCriticalPathMilliseconds >
                    b.estimatedCriticalPathMilliseconds;
         });
+    // This first release is advisory: the current node API has no purity or
+    // side-effect contract, so applying a suggested order could change behavior.
+    // Keep execution in the legacy deterministic order until nodes can declare
+    // that they are safe to reorder.
     recordAetherScheduleOrder(scheduledRoots);
-    for (const auto &entry : scheduledRoots) {
-        applyNode(entry.node);
+    for (const auto &id : ids) {
+        applyNode(id);
     }
 #else
     for (auto const &id: ids) {
