@@ -373,6 +373,7 @@ void viewDecodeClear()
 {
     zeno::log_debug("viewDecodeClear");
     viewDecodeData.clear();
+    latestAetherReport.clear();
     packetProc.onStart();
 }
 
