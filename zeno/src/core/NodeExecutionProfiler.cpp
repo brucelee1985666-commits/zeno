@@ -9,7 +9,9 @@
 #include <iomanip>
 #include <mutex>
 #include <sstream>
+#include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace zeno {
@@ -344,6 +346,110 @@ std::string getAetherExecutionReportJson() {
         out << (i ? ", " : "") << "\"" << jsonEscape(report.findings[i]) << "\"";
     out << "]\n}\n";
     return out.str();
+}
+
+
+AetherExecutionReportComparison compareAetherExecutionReports(
+    AetherExecutionReport const &baseline,
+    AetherExecutionReport const &candidate) {
+    AetherExecutionReportComparison comparison;
+    comparison.baselineExecutionId = baseline.executionId;
+    comparison.candidateExecutionId = candidate.executionId;
+    comparison.nodeApplyDeltaMilliseconds =
+        candidate.totalNodeApplyMilliseconds - baseline.totalNodeApplyMilliseconds;
+    comparison.nodeApplyDeltaPercent = baseline.totalNodeApplyMilliseconds > 0.0
+        ? comparison.nodeApplyDeltaMilliseconds / baseline.totalNodeApplyMilliseconds * 100.0
+        : 0.0;
+    comparison.gpuKernelDeltaMilliseconds =
+        candidate.totalGpuKernelMilliseconds - baseline.totalGpuKernelMilliseconds;
+    comparison.gpuKernelDeltaPercent = baseline.totalGpuKernelMilliseconds > 0.0
+        ? comparison.gpuKernelDeltaMilliseconds / baseline.totalGpuKernelMilliseconds * 100.0
+        : 0.0;
+
+    const auto oldBytes = baseline.totalGpuTransferBytes;
+    const auto newBytes = candidate.totalGpuTransferBytes;
+    if (newBytes >= oldBytes) {
+        const auto difference = newBytes - oldBytes;
+        comparison.gpuTransferBytesDelta = difference >
+            static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
+            ? std::numeric_limits<std::int64_t>::max()
+            : static_cast<std::int64_t>(difference);
+    } else {
+        const auto difference = oldBytes - newBytes;
+        comparison.gpuTransferBytesDelta = difference >
+            static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
+            ? std::numeric_limits<std::int64_t>::min()
+            : -static_cast<std::int64_t>(difference);
+    }
+
+    std::unordered_map<std::string, NodeExecutionProfile> oldNodes;
+    std::unordered_map<std::string, NodeExecutionProfile> newNodes;
+    std::unordered_set<std::string> nodeNames;
+    for (const auto &entry : baseline.nodes) {
+        oldNodes.emplace(entry.node, entry);
+        nodeNames.insert(entry.node);
+    }
+    for (const auto &entry : candidate.nodes) {
+        newNodes.emplace(entry.node, entry);
+        nodeNames.insert(entry.node);
+    }
+    for (const auto &name : nodeNames) {
+        const auto oldIt = oldNodes.find(name);
+        const auto newIt = newNodes.find(name);
+        const NodeExecutionProfile oldValue = oldIt == oldNodes.end()
+            ? NodeExecutionProfile{} : oldIt->second;
+        const NodeExecutionProfile newValue = newIt == newNodes.end()
+            ? NodeExecutionProfile{} : newIt->second;
+        AetherMetricDelta delta;
+        delta.name = name;
+        delta.previousCalls = oldValue.calls;
+        delta.currentCalls = newValue.calls;
+        delta.previousMilliseconds = oldValue.totalMilliseconds;
+        delta.currentMilliseconds = newValue.totalMilliseconds;
+        delta.deltaMilliseconds = delta.currentMilliseconds - delta.previousMilliseconds;
+        delta.deltaPercent = delta.previousMilliseconds > 0.0
+            ? delta.deltaMilliseconds / delta.previousMilliseconds * 100.0 : 0.0;
+        comparison.nodes.emplace_back(std::move(delta));
+    }
+    std::sort(comparison.nodes.begin(), comparison.nodes.end(),
+        [](AetherMetricDelta const &a, AetherMetricDelta const &b) {
+            return a.deltaMilliseconds > b.deltaMilliseconds;
+        });
+
+    std::unordered_map<std::string, GpuKernelExecutionProfile> oldKernels;
+    std::unordered_map<std::string, GpuKernelExecutionProfile> newKernels;
+    std::unordered_set<std::string> kernelNames;
+    for (const auto &entry : baseline.gpuKernels) {
+        oldKernels.emplace(entry.kernel, entry);
+        kernelNames.insert(entry.kernel);
+    }
+    for (const auto &entry : candidate.gpuKernels) {
+        newKernels.emplace(entry.kernel, entry);
+        kernelNames.insert(entry.kernel);
+    }
+    for (const auto &name : kernelNames) {
+        const auto oldIt = oldKernels.find(name);
+        const auto newIt = newKernels.find(name);
+        const GpuKernelExecutionProfile oldValue = oldIt == oldKernels.end()
+            ? GpuKernelExecutionProfile{} : oldIt->second;
+        const GpuKernelExecutionProfile newValue = newIt == newKernels.end()
+            ? GpuKernelExecutionProfile{} : newIt->second;
+        AetherMetricDelta delta;
+        delta.name = name;
+        delta.previousCalls = oldValue.calls;
+        delta.currentCalls = newValue.calls;
+        delta.previousMilliseconds = oldValue.totalMilliseconds;
+        delta.currentMilliseconds = newValue.totalMilliseconds;
+        delta.deltaMilliseconds = delta.currentMilliseconds - delta.previousMilliseconds;
+        delta.deltaPercent = delta.previousMilliseconds > 0.0
+            ? delta.deltaMilliseconds / delta.previousMilliseconds * 100.0 : 0.0;
+        comparison.gpuKernels.emplace_back(std::move(delta));
+    }
+    std::sort(comparison.gpuKernels.begin(), comparison.gpuKernels.end(),
+        [](AetherMetricDelta const &a, AetherMetricDelta const &b) {
+            return a.deltaMilliseconds > b.deltaMilliseconds;
+        });
+    return comparison;
 }
 
 } // namespace zeno
