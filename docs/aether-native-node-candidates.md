@@ -1,7 +1,7 @@
 # Aether native-node parallelization candidates
 
-Status: native prepared-callback adapters implemented for `TransformMesh` and
-`GeoVertexVel` in the optional `oldzenbase` extension. It is callable only through the prepared-callback API;
+Status: native prepared-callback adapters implemented for `TransformMesh`,
+`GeoVertexVel`, and `PrimitiveToParticles` in the optional `oldzenbase` extension. It is callable only through the prepared-callback API;
 ordinary `INode::apply()` is not routed through Taskflow.
 
 ## Safety gate
@@ -51,6 +51,16 @@ Taskflow smoke test checks the velocity result, graph-output isolation, zero
 explicit callback building block; it does not route normal graph execution
 through Taskflow.
 
+## Implemented third adapter: PrimitiveToParticles
+
+`projects/oldzenbase/pars/PrimitiveToParticles.cpp` now validates the primitive
+input and the optional `vel` attribute. A present velocity attribute must be
+`vec3f` and match the position count; when absent, velocity is explicitly
+initialized to zero rather than relying on default vector initialization.
+The callback reads the source primitive and returns a fresh `ParticlesObject`.
+Its smoke test covers position/velocity conversion, absent-velocity defaults,
+malformed attribute lengths, and graph-output isolation.
+
 ## Remaining candidates from the legacy oldzenbase extension
 
 These are candidates for follow-up adapters, not approved opt-ins yet.
@@ -91,9 +101,9 @@ race testing or object-lifetime review.
 
 ## Current limitations
 
-- `TransformMesh` and `GeoVertexVel` are the only production nodes in this extension
-that currently override `getAetherExecutionCapabilities()` for the Aether CPU
-contract; all other nodes retain the conservative default.
+- `TransformMesh`, `GeoVertexVel`, and `PrimitiveToParticles` are the only production
+nodes in this extension that currently override `getAetherExecutionCapabilities()`
+for the Aether CPU contract; all other nodes retain the conservative default.
 - `oldzenbase` is optional and categorized as deprecated.
 - The Taskflow prepared callback bridge is a prototype, not an integration
   replacement for `Graph::applyNodes`.
