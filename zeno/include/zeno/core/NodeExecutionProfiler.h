@@ -53,7 +53,7 @@ ZENO_API std::vector<NodeExecutionProfile> getNodeExecutionProfile();
 ZENO_API void resetNodeExecutionProfile();
 ZENO_API void recordNodeExecution(const std::string &node,
                                   double elapsedMilliseconds,
-                                  bool failed);
+                                  bool failed, const void *graphIdentity = nullptr);
 
 class NodeDependencyProfileScope {
 public:
@@ -71,7 +71,7 @@ private:
 
 class NodeExecutionProfileScope {
 public:
-    explicit NodeExecutionProfileScope(std::string nodeName);
+    explicit NodeExecutionProfileScope(std::string nodeName, const void *graphIdentity = nullptr);
     ~NodeExecutionProfileScope();
 
     NodeExecutionProfileScope(NodeExecutionProfileScope const &) = delete;
@@ -83,6 +83,7 @@ private:
     std::string nodeName;
     std::chrono::steady_clock::time_point started;
     bool failed = false;
+    const void *graphIdentity = nullptr;
 };
 
 
@@ -100,7 +101,7 @@ struct AetherScheduleEntry {
 };
 
 ZENO_API AetherNodeCostEstimate getAetherNodeCostEstimate(
-    const std::string &nodeName);
+    const std::string &nodeName, const void *graphIdentity = nullptr);
 ZENO_API void recordAetherScheduleOrder(
     const std::vector<AetherScheduleEntry> &entries);
 ZENO_API std::vector<AetherScheduleEntry> getAetherScheduleOrder();
