@@ -28,6 +28,10 @@ namespace zeno {
 ZENO_API INode::INode() = default;
 ZENO_API INode::~INode() = default;
 
+ZENO_API AetherNodeExecutionCapabilities INode::getAetherExecutionCapabilities() const {
+    return {}; // Unknown nodes remain sequential and CPU-only by default.
+}
+
 ZENO_API Graph *INode::getThisGraph() const {
     return graph;
 }

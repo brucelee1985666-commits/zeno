@@ -2,6 +2,7 @@
 
 #include <zeno/utils/api.h>
 #include <zeno/core/IObject.h>
+#include <zeno/core/AetherNodeExecutionCapabilities.h>
 #include <zeno/utils/safe_dynamic_cast.h>
 #include <zeno/funcs/LiterialConverter.h>
 #include <variant>
@@ -39,6 +40,9 @@ public:
 
     ZENO_API INode();
     ZENO_API virtual ~INode();
+
+    // Conservative default: nodes are not scheduler-safe unless they opt in.
+    ZENO_API virtual AetherNodeExecutionCapabilities getAetherExecutionCapabilities() const;
 
     //INode(INode const &) = delete;
     //INode &operator=(INode const &) = delete;

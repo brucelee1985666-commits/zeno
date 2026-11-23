@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
-#if TF_VERSION < 301100 || TF_VERSION >= 400000
+#if TF_VERSION < 301100 || TF_VERSION >= 301200
 #error "Aether currently supports Taskflow 3.11.x (C++17); Taskflow 4.x requires C++20"
 #endif
 namespace zeno {

@@ -7,6 +7,8 @@ option(ZENO_AETHER_ENABLE_PROFILER "Enable thread-safe per-node execution profil
 option(ZENO_AETHER_ENABLE_SMART_SCHEDULER "Enable conservative history-based graph root scheduling" OFF)
 option(ZENO_AETHER_ENABLE_TASKFLOW "Enable the optional Taskflow 3.11 CPU task-graph backend" OFF)
 option(ZENO_AETHER_BUILD_TASKFLOW_TESTS "Build the optional Aether Taskflow smoke test" OFF)
+option(ZENO_AETHER_BUILD_TASKFLOW_BENCHMARKS "Build the standalone Taskflow CPU benchmark" OFF)
+option(ZENO_AETHER_BUILD_CAPABILITY_TESTS "Build Aether node capability contract tests" OFF)
 
 file(GLOB_RECURSE source CONFIGURE_DEPENDS include/*.h src/*.cpp)
 
@@ -40,6 +42,10 @@ if (ZENO_AETHER_ENABLE_TASKFLOW)
         HINTS ENV TASKFLOW_ROOT ${TASKFLOW_ROOT}
         PATH_SUFFIXES include
     )
+    if (NOT ZENO_AETHER_TASKFLOW_INCLUDE_DIR AND TASKFLOW_ROOT AND
+        EXISTS "${TASKFLOW_ROOT}/taskflow/taskflow.hpp")
+        set(ZENO_AETHER_TASKFLOW_INCLUDE_DIR "${TASKFLOW_ROOT}")
+    endif()
     if (NOT ZENO_AETHER_TASKFLOW_INCLUDE_DIR)
         message(FATAL_ERROR
             "ZENO_AETHER_ENABLE_TASKFLOW=ON, but taskflow/taskflow.hpp was not found. "
@@ -51,7 +57,7 @@ if (ZENO_AETHER_ENABLE_TASKFLOW)
     set(CMAKE_REQUIRED_LIBRARIES Threads::Threads)
     check_cxx_source_compiles("
         #include <taskflow/taskflow.hpp>
-        #if TF_VERSION < 301100 || TF_VERSION >= 400000
+        #if TF_VERSION < 301100 || TF_VERSION >= 301200
         #error Unsupported Taskflow version: Aether currently targets 3.11.x (C++17)
         #endif
         int main() { tf::Executor executor; tf::Taskflow taskflow; executor.run(taskflow).get(); }
@@ -72,6 +78,19 @@ if (ZENO_AETHER_ENABLE_TASKFLOW AND ZENO_AETHER_BUILD_TASKFLOW_TESTS)
     add_executable(zeno_aether_taskflow_smoke tests/AetherTaskflowExecutorSmoke.cpp)
     target_link_libraries(zeno_aether_taskflow_smoke PRIVATE zeno)
     add_test(NAME zeno_aether_taskflow_smoke COMMAND zeno_aether_taskflow_smoke)
+endif()
+
+if (ZENO_AETHER_BUILD_CAPABILITY_TESTS)
+    enable_testing()
+    add_executable(zeno_aether_capability_smoke tests/AetherExecutionPlanSmoke.cpp)
+    target_link_libraries(zeno_aether_capability_smoke PRIVATE zeno)
+    add_test(NAME zeno_aether_capability_smoke COMMAND zeno_aether_capability_smoke)
+endif()
+
+if (ZENO_AETHER_ENABLE_TASKFLOW AND ZENO_AETHER_BUILD_TASKFLOW_BENCHMARKS)
+    add_executable(zeno_aether_taskflow_benchmark tests/AetherTaskflowBenchmark.cpp)
+    target_include_directories(zeno_aether_taskflow_benchmark SYSTEM PRIVATE ${ZENO_AETHER_TASKFLOW_INCLUDE_DIR})
+    target_link_libraries(zeno_aether_taskflow_benchmark PRIVATE Threads::Threads)
 endif()
 
 if (ZENO_AETHER_ENABLE_PROFILER OR ZENO_AETHER_ENABLE_SMART_SCHEDULER)
