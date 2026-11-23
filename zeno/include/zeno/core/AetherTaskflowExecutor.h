@@ -12,7 +12,8 @@ namespace zeno {
 // recurse through inputs and mutate shared graph/session state.
 struct AetherTaskflowTask { std::string name; std::function<void()> work; };
 using AetherTaskflowDependency = std::pair<std::size_t, std::size_t>;
-// Optional CPU backend powered by Taskflow 3.11.x (C++17).
+// Optional CPU backend powered by Taskflow 3.11.x (C++17). Callbacks may run
+// concurrently; callers must provide thread-safe work and explicit dependencies.
 class ZENO_API AetherTaskflowExecutor {
 public:
  AetherTaskflowExecutor(); ~AetherTaskflowExecutor();
