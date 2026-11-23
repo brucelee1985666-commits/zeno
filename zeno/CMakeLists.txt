@@ -4,6 +4,7 @@ option(ZENO_ENABLE_OPENMP "Enable OpenMP in ZENO for parallelism" ON)
 option(ZENO_ENABLE_MAGICENUM "Enable magicenum in ZENO for enum reflection" OFF)
 option(ZENO_ENABLE_BACKWARD "Enable ZENO fault handler for traceback" OFF)
 option(ZENO_AETHER_ENABLE_PROFILER "Enable thread-safe per-node execution profiling" OFF)
+option(ZENO_AETHER_ENABLE_SMART_SCHEDULER "Enable conservative history-based graph root scheduling" OFF)
 
 file(GLOB_RECURSE source CONFIGURE_DEPENDS include/*.h src/*.cpp)
 
@@ -30,8 +31,12 @@ if (ZENO_ENABLE_OPENMP)
     endif()
 endif()
 
-if (ZENO_AETHER_ENABLE_PROFILER)
+if (ZENO_AETHER_ENABLE_PROFILER OR ZENO_AETHER_ENABLE_SMART_SCHEDULER)
     target_compile_definitions(zeno PUBLIC ZENO_AETHER_ENABLE_PROFILER=1)
+endif()
+
+if (ZENO_AETHER_ENABLE_SMART_SCHEDULER)
+    target_compile_definitions(zeno PUBLIC ZENO_AETHER_ENABLE_SMART_SCHEDULER=1)
 endif()
 
 if (ZENO_BENCHMARKING)
