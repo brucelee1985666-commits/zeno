@@ -193,7 +193,8 @@ AetherNodeCostEstimate getAetherNodeCostEstimate(const std::string &nodeName) {
 
 void recordAetherScheduleOrder(const std::vector<AetherScheduleEntry> &entries) {
     std::lock_guard<std::mutex> lock(profileMutex());
-    scheduleOrderData() = entries;
+    auto &schedule = scheduleOrderData();
+    schedule.insert(schedule.end(), entries.begin(), entries.end());
 }
 
 std::vector<AetherScheduleEntry> getAetherScheduleOrder() {
