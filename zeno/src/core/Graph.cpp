@@ -141,8 +141,10 @@ ZENO_API void Graph::applyNodes(std::set<std::string> const &ids) {
             }
 
             visiting.erase(nodeId);
+            const double confidenceWeightedNodeCost =
+                estimate.meanApplyMilliseconds * estimate.confidence;
             const double pathCost =
-                estimate.meanApplyMilliseconds + longestDependencyPath;
+                confidenceWeightedNodeCost + longestDependencyPath;
             pathCostCache[nodeId] = pathCost;
             return pathCost;
         };
@@ -155,8 +157,8 @@ ZENO_API void Graph::applyNodes(std::set<std::string> const &ids) {
         entry.estimatedCriticalPathMilliseconds = estimateCriticalPath(id);
         entry.historicalSamples = sampleCache[id];
         entry.reason = entry.historicalSamples
-            ? "ordered by historical EWMA node cost plus longest known dependency path"
-            : "no execution history; preserved deterministic input order";
+            ? "ordered by confidence-weighted historical EWMA plus longest known dependency path"
+            : "no root timing history; stable ties retain deterministic input order";
         scheduledRoots.emplace_back(std::move(entry));
     }
 
