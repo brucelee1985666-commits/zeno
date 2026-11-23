@@ -120,3 +120,55 @@ Safety gates run before any callback:
 This is intentionally a bridge for pre-materialized work, not a direct `INode::apply()` integration. It does not resolve Zeno inputs, touch `Graph::ctx`, mutate graph state, or opt existing nodes into parallel execution. A future production adapter still needs a single-threaded preparation phase, explicit output ownership, cancellation/error policy, and lifetime guarantees.
 
 The optional Taskflow test now covers a two-branch dependency join and verifies that an unsafe plan is rejected before dispatch. Build/run it with `ZENO_AETHER_ENABLE_TASKFLOW=ON` and `ZENO_AETHER_BUILD_TASKFLOW_TESTS=ON`. This test has been authored but has not been compiled or executed in this environment.
+
+
+## Prepared DAG execution with isolated outputs (PR #7)
+
+The preparation stage now creates a stable execution snapshot and can dispatch specialized callbacks as a real dependency-driven DAG.
+
+### Preparation phase
+- Revalidates the plan against the current graph: node IDs, capability values, dependency edges, and resource-safety result.
+- Copies each node's static input values and records each graph-bound socket as immutable dependency metadata (source node index and output socket).
+- Captures a source node's muted output when present, preserving the legacy `getNodeOutput` override behavior.
+- Rejects keyframe/formula metadata for now; those require explicit frame/evaluation-context semantics.
+- Does not call `INode::requireInput`, `preApply`, `doApply`, or `Graph::applyNode`; does not write node inputs/outputs or allocate `Graph::ctx`.
+
+### Taskflow execution phase
+With `ZENO_AETHER_ENABLE_TASKFLOW=ON`, `executeAetherPreparedPlanTaskflow` accepts one specialized callback per planned node. Each callback receives a prepared input snapshot and returns its own output map.
+
+- Taskflow preserves the audited dependency edges.
+- A callback resolves linked inputs from the predecessor's private output slot only after that predecessor completes.
+- Each task writes only its own output slot; downstream tasks read predecessor slots after dependency synchronization.
+- Missing required outputs throw and propagate through the Taskflow future.
+- The function returns output maps separately and never writes them back into the original Zeno graph.
+
+This is a real DAG runner for adapter callbacks, not yet an executor for ordinary `INode::apply()`. A callback must be independently implemented, CPU-thread-safe, deterministic, side-effect-free, and must not mutate input objects or shared graph/session state. The `zany` values are shared pointers, not deep copies; treat their pointed-to objects as read-only. Callback-created outputs are isolated per node until the caller explicitly consumes the returned result.
+
+### Deliberate limitations
+- Dynamic formulas and keyframes are rejected rather than evaluated on worker threads.
+- No direct integration with Zeno's mutable `Graph::ctx`, dirty checker, session/global state, or ordinary node lifecycle.
+- No automatic cloning of `IObject` payloads and no automatic memory ownership transfer.
+- No CUDA/StarPU dispatch in this increment.
+
+### Smoke tests
+- `AetherPreparedExecutionSmoke.cpp`: validates static-input snapshots, dependency metadata, stale-plan rejection, and non-mutation of the graph.
+- `AetherPreparedTaskflowSmoke.cpp`: validates a producer/consumer DAG where the consumer receives the producer's output only after dependency completion, and verifies outputs remain outside the source graph.
+
+Configure the preparation test:
+```sh
+-DZENO_AETHER_BUILD_CAPABILITY_TESTS=ON
+```
+
+Configure both Taskflow smoke tests:
+```sh
+-DZENO_AETHER_ENABLE_TASKFLOW=ON
+-DTASKFLOW_ROOT=/path/to/taskflow-3.11
+-DZENO_AETHER_BUILD_TASKFLOW_TESTS=ON
+```
+
+Run:
+```sh
+ctest --output-on-failure -R 'zeno_aether_(prepared_inputs|prepared_taskflow)_smoke'
+```
+
+The tests are authored but have not been compiled or executed in this environment. The adapter remains opt-in and does not change legacy execution.
