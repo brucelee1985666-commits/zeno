@@ -75,6 +75,7 @@ prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan
         }
     }
 
+    std::set<std::pair<std::size_t, std::size_t>> currentGraphEdges;
     std::map<std::string, AetherPreparedNodeInputs> prepared;
     for (const auto &entry : plan.nodes) {
         const INode *node = graph.nodes.at(entry.id).get();
@@ -98,6 +99,7 @@ prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan
                     "Aether plan omits upstream dependency " + sourceNodeId +
                     " required by " + entry.id);
             const auto targetIndex = plannedIndices.at(entry.id);
+            currentGraphEdges.emplace(sourceIndex->second, targetIndex);
             if (auditedEdges.find({sourceIndex->second, targetIndex}) == auditedEdges.end())
                 throw std::invalid_argument(
                     "Aether plan is stale: dependency edge is missing for " +
@@ -118,6 +120,8 @@ prepareAetherExecutionInputs(Graph const &graph, AetherExecutionPlan const &plan
 
         prepared.emplace(entry.id, std::move(snapshot));
     }
+    if (currentGraphEdges != auditedEdges)
+        throw std::invalid_argument("Aether plan is stale: graph dependency topology changed");
     return prepared;
 }
 
