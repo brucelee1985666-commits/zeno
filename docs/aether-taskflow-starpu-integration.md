@@ -64,3 +64,44 @@ Decision: do not link StarPU yet. First define an Aether node capability/resourc
 - No automatic network fetch occurs during CMake configure.
 - Taskflow and StarPU are not enabled by default.
 - The smoke test is authored but has not been compiled or run in this environment.
+
+## Node capability contract and execution-plan audit (PR #5)
+
+The next increment adds an explicit opt-in contract to `INode`:
+
+- `cpuThreadSafe`: the node's work may run concurrently with other declared-safe nodes.
+- `sideEffectFree`: execution has no externally observable side effects that require legacy ordering.
+- `deterministic`: equivalent inputs produce equivalent outputs.
+- `hasCudaImplementation`: a real CUDA implementation exists for this operation.
+- `explicitResourceAccess`: all shared/device resources are declared.
+- `resources`: named resources with read, write, or read-write access and an optional byte estimate.
+
+The default implementation returns every capability as false. Existing nodes therefore remain conservative and sequential until their authors explicitly opt in. This adds a virtual method to `INode`; downstream binary plugins must be rebuilt against the updated interface.
+
+`buildAetherExecutionPlan` creates a dependency-first diagnostic snapshot from requested roots. It reports missing dependencies, cycles, per-node CPU/CUDA readiness, blockers, and unordered conflicting accesses to the same declared resource. It does not call node code, mutate `Graph::ctx`, execute Taskflow, or change legacy execution order.
+
+A node is individually CPU-safe only when thread safety, side-effect freedom, and determinism are all declared. CUDA readiness additionally requires a CUDA implementation and explicit resource access. A graph is not declared parallel-safe when there are missing nodes, cycles, or unordered write/read-write conflicts.
+
+### Benchmark harness
+
+An optional standalone benchmark compares a serial CPU baseline with Taskflow on independent deterministic CPU tasks. It performs a warm-up, runs repeated trials, reports median timings and a checksum, and rejects mismatched results. It measures CPU task scheduling only; it does not benchmark Zeno nodes, CUDA, transfers, or StarPU.
+
+Configure with:
+```sh
+-DZENO_AETHER_ENABLE_TASKFLOW=ON
+-DTASKFLOW_ROOT=/path/to/taskflow-3.11
+-DZENO_AETHER_BUILD_TASKFLOW_BENCHMARKS=ON
+-DZENO_AETHER_BUILD_CAPABILITY_TESTS=ON
+```
+
+Run the standalone benchmark with:
+```sh
+zeno_aether_taskflow_benchmark 8 2000000 5
+```
+
+Run the capability audit smoke test through CTest:
+```sh
+ctest --output-on-failure -R zeno_aether_capability_smoke
+```
+
+No node implementation opts in as part of this PR. The audit intentionally demonstrates conservative behavior; measured speedups must come from a real target machine and representative Zeno workloads.
