@@ -388,17 +388,17 @@ std::string getAetherExecutionReportJson() {
     if (!report.gpuKernels.empty()) out << "\n  ";
     out << "],\n";
 
-    out << "  \\"schedule\\": [";
+    out << "  \"schedule\": [";
     for (std::size_t i = 0; i < report.schedule.size(); ++i) {
         const auto &entry = report.schedule[i];
-        out << (i ? ",\\n" : "\\n") << "    {\\"node\\": \\"" << jsonEscape(entry.node)
-            << "\\", \\"estimated_critical_path_ms\\": ";
+        out << (i ? ",\n" : "\n") << "    {\"node\": \"" << jsonEscape(entry.node)
+            << "\", \"estimated_critical_path_ms\": ";
         jsonNumber(out, entry.estimatedCriticalPathMilliseconds);
-        out << ", \\"historical_samples\\": " << entry.historicalSamples
-            << ", \\"reason\\": \\"" << jsonEscape(entry.reason) << "\\"}";
+        out << ", \"historical_samples\": " << entry.historicalSamples
+            << ", \"reason\": \"" << jsonEscape(entry.reason) << "\"}";
     }
-    if (!report.schedule.empty()) out << "\\n  ";
-    out << "],\\n";
+    if (!report.schedule.empty()) out << "\n  ";
+    out << "],\n";
 
     const auto &t = report.gpuTransfers;
     out << "  \"gpu_transfers\": {"
