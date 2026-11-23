@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: aether-ci-${{ github.event.pull_request.number || github.ref }}
+  group: aether-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -87,6 +87,8 @@ jobs:
           -DZENO_ENABLE_OPENMP=OFF
           -DZENO_BENCHMARKING=OFF
           -DZENO_AETHER_ENABLE_TASKFLOW=ON
+          -DZENO_AETHER_ENABLE_PROFILER=ON
+          -DZENO_AETHER_ENABLE_SMART_SCHEDULER=ON
           -DZENO_AETHER_BUILD_TASKFLOW_TESTS=ON
           -DZENO_AETHER_BUILD_CAPABILITY_TESTS=ON
           -DTASKFLOW_ROOT=${{ github.workspace }}/.ci/taskflow
