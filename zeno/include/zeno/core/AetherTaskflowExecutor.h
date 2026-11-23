@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#ifdef ZENO_AETHER_ENABLE_TASKFLOW
 namespace zeno {
 // Explicit standalone task graph. Not an INode adapter: current Zeno nodes may
 // recurse through inputs and mutate shared graph/session state.
@@ -23,3 +24,4 @@ public:
 private: struct Impl; std::unique_ptr<Impl> impl_;
 };
 }
+#endif // ZENO_AETHER_ENABLE_TASKFLOW
