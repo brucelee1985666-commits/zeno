@@ -2,6 +2,7 @@
 
 #ifdef ZENO_AETHER_ENABLE_TASKFLOW
 
+#include <set>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -22,7 +23,13 @@ void executeAetherExecutionPlanTaskflow(
 
     std::vector<AetherTaskflowTask> tasks;
     tasks.reserve(plan.nodes.size());
+    std::set<std::string> nodeIds;
     for (const auto &node : plan.nodes) {
+        if (!nodeIds.insert(node.id).second)
+            throw std::invalid_argument("Aether execution plan contains a duplicate node ID: " + node.id);
+        if (!node.cpuParallelSafe || !node.capabilities.isCpuParallelSafe())
+            throw std::invalid_argument(
+                "Aether execution plan contains a node without a complete CPU safety contract: " + node.id);
         const auto work = preparedWork.find(node.id);
         if (work == preparedWork.end() || !work->second)
             throw std::invalid_argument(
