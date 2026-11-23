@@ -5,8 +5,6 @@ option(ZENO_ENABLE_MAGICENUM "Enable magicenum in ZENO for enum reflection" OFF)
 option(ZENO_ENABLE_BACKWARD "Enable ZENO fault handler for traceback" OFF)
 option(ZENO_AETHER_ENABLE_PROFILER "Enable thread-safe per-node execution profiling" OFF)
 option(ZENO_AETHER_ENABLE_SMART_SCHEDULER "Enable conservative history-based graph root scheduling" OFF)
-option(ZENO_AETHER_ENABLE_TASKFLOW "Enable the optional Taskflow 3.11 CPU task-graph backend" OFF)
-option(ZENO_AETHER_BUILD_TASKFLOW_TESTS "Build the optional Aether Taskflow smoke test" OFF)
 
 file(GLOB_RECURSE source CONFIGURE_DEPENDS include/*.h src/*.cpp)
 
@@ -34,45 +32,6 @@ if (ZENO_ENABLE_OPENMP)
 endif()
 
 
-if (ZENO_AETHER_ENABLE_TASKFLOW)
-    find_path(ZENO_AETHER_TASKFLOW_INCLUDE_DIR
-        NAMES taskflow/taskflow.hpp
-        HINTS ENV TASKFLOW_ROOT ${TASKFLOW_ROOT}
-        PATH_SUFFIXES include
-    )
-    if (NOT ZENO_AETHER_TASKFLOW_INCLUDE_DIR)
-        message(FATAL_ERROR
-            "ZENO_AETHER_ENABLE_TASKFLOW=ON, but taskflow/taskflow.hpp was not found. "
-            "Install Taskflow v3.11.x and set TASKFLOW_ROOT or ZENO_AETHER_TASKFLOW_INCLUDE_DIR.")
-    endif()
-    find_package(Threads REQUIRED)
-    include(CheckCXXSourceCompiles)
-    set(CMAKE_REQUIRED_INCLUDES ${ZENO_AETHER_TASKFLOW_INCLUDE_DIR})
-    set(CMAKE_REQUIRED_LIBRARIES Threads::Threads)
-    check_cxx_source_compiles("
-        #include <taskflow/taskflow.hpp>
-        #if TF_VERSION < 301100 || TF_VERSION >= 400000
-        #error Unsupported Taskflow version: Aether currently targets 3.11.x (C++17)
-        #endif
-        int main() { tf::Executor executor; tf::Taskflow taskflow; executor.run(taskflow).get(); }
-    " ZENO_AETHER_TASKFLOW_COMPATIBLE)
-    unset(CMAKE_REQUIRED_INCLUDES)
-    unset(CMAKE_REQUIRED_LIBRARIES)
-    if (NOT ZENO_AETHER_TASKFLOW_COMPATIBLE)
-        message(FATAL_ERROR "Aether requires Taskflow 3.11.x and a working C++17 toolchain.")
-    endif()
-    target_include_directories(zeno SYSTEM PRIVATE ${ZENO_AETHER_TASKFLOW_INCLUDE_DIR})
-    target_link_libraries(zeno PRIVATE Threads::Threads)
-    target_compile_definitions(zeno PUBLIC ZENO_AETHER_ENABLE_TASKFLOW=1)
-    message(STATUS "Zeno Aether: Taskflow CPU task-graph backend enabled")
-endif()
-
-if (ZENO_AETHER_ENABLE_TASKFLOW AND ZENO_AETHER_BUILD_TASKFLOW_TESTS)
-    enable_testing()
-    add_executable(zeno_aether_taskflow_smoke tests/AetherTaskflowExecutorSmoke.cpp)
-    target_link_libraries(zeno_aether_taskflow_smoke PRIVATE zeno)
-    add_test(NAME zeno_aether_taskflow_smoke COMMAND zeno_aether_taskflow_smoke)
-endif()
 
 if (ZENO_AETHER_ENABLE_PROFILER OR ZENO_AETHER_ENABLE_SMART_SCHEDULER)
     target_compile_definitions(zeno PUBLIC ZENO_AETHER_ENABLE_PROFILER=1)
