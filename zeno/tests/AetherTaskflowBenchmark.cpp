@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -35,7 +36,7 @@ int main(int argc, char **argv) {
     if (taskCount == 0 || iterations == 0 || trials == 0) return 2;
 
     std::vector<std::uint64_t> serial(taskCount), parallel(taskCount);
-    tf::Executor executor;
+    tf::Executor executor(std::max<std::size_t>(1, std::thread::hardware_concurrency()));
     tf::Taskflow flow("aether-independent-cpu-tasks");
     for (std::size_t i = 0; i < taskCount; ++i)
         flow.emplace([&, i] { parallel[i] = work(i + 1, iterations); }).name("cpu-" + std::to_string(i));
