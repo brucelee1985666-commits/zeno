@@ -18,6 +18,11 @@ AetherPreparedNodeWork makeAetherTransformMeshPreparedWork();
 AetherPreparedNodeWork makeAetherGeoVertexVelPreparedWork();
 AetherPreparedNodeWork makeAetherPrimitiveToParticlesPreparedWork();
 AetherPreparedNodeWork makeAetherParticlesToPrimitivePreparedWork();
+
+// Builds callbacks for every node in a validated CPU-safe plan. Unknown node
+// types are rejected rather than falling back to arbitrary INode::apply().
+std::map<std::string, AetherPreparedNodeWork>
+makeAetherOldzenbasePreparedWorkForPlan(Graph const &graph, AetherExecutionPlan const &plan);
 #endif
 
 } // namespace zeno
