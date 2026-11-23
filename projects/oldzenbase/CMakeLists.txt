@@ -19,4 +19,11 @@ if (ZENO_AETHER_ENABLE_TASKFLOW AND ZENO_AETHER_BUILD_TASKFLOW_TESTS)
     target_link_libraries(zeno_aether_oldzenbase_transform_mesh_smoke PRIVATE zeno)
     add_test(NAME zeno_aether_oldzenbase_transform_mesh_smoke
         COMMAND zeno_aether_oldzenbase_transform_mesh_smoke)
+
+    add_executable(zeno_aether_oldzenbase_geo_vertex_vel_smoke
+        tests/AetherGeoVertexVelPreparedSmoke.cpp)
+    target_include_directories(zeno_aether_oldzenbase_geo_vertex_vel_smoke PRIVATE include)
+    target_link_libraries(zeno_aether_oldzenbase_geo_vertex_vel_smoke PRIVATE zeno)
+    add_test(NAME zeno_aether_oldzenbase_geo_vertex_vel_smoke
+        COMMAND zeno_aether_oldzenbase_geo_vertex_vel_smoke)
 endif()
