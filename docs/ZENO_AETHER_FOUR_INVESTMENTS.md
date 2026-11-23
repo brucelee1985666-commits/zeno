@@ -126,3 +126,19 @@ The opt-in transfer profiler has now been implemented in the companion fork:
 The fork implementation instruments both device-memory and managed-memory explicit copy wrappers. It records requested bytes and call counts for HtoD, DtoH, DtoD, and generic copies, with generic copies kept unclassified. CMake option `ZS_ENABLE_TRANSFER_PROFILER` defaults to OFF.
 
 The Zeno submodule URL and gitlink are intentionally unchanged while the ZPC PR is under review. After the patch is accepted and built against the pinned toolchain, update the submodule URL/pointer to the reviewed fork commit and expose the snapshot API through Zeno's diagnostics. No CUDA build or runtime validation has been performed yet.
+
+
+## ZenoCompute increment 6 — ZPC transfer counters connected to diagnostics
+
+The companion ZPC fork now has a minimal patch based directly on the exact submodule revision previously pinned by Zeno:
+- ZPC commit: `ff940ee15cb7abbf6e1b2610dfb46da767098168`
+- Parent: original pinned ZPC revision `2739e7b6a71407be26dbc1a9b66ffcf597f031f8`
+- This avoids silently importing the fork's newer default-branch history.
+
+Zeno integration in this branch:
+- The `projects/CUDA/zpc` gitlink points to the small fork commit above and `.gitmodules` points to the user's ZPC fork.
+- `ZENO_AETHER_ENABLE_TRANSFER_PROFILER` is an opt-in CMake switch (OFF by default); when enabled it turns on ZPC's `ZS_ENABLE_TRANSFER_PROFILER` and exposes `getGpuTransferExecutionProfile()` / `resetGpuTransferExecutionProfile()` through the existing node-profiler API.
+- Snapshot fields separate HtoD, DtoH, DtoD, and generic copy calls/bytes. Generic copies remain unclassified.
+- The existing dependency-resolution RAII scope is now declared and implemented in the profiler header/source, with cumulative edge counts and inclusive resolution time.
+
+The transfer counters are diagnostic data only. They do not synchronize CUDA, attribute transfers to individual nodes, observe Unified Memory page migration, or measure physical PCIe traffic/latency. The ZPC PR is still under review. Build and runtime tests remain pending.

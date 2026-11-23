@@ -1,4 +1,7 @@
 #include <zeno/core/NodeExecutionProfiler.h>
+#ifdef ZENO_AETHER_ENABLE_TRANSFER_PROFILER
+#include <zensim/cuda/memory/TransferProfiler.hpp>
+#endif
 
 #include <algorithm>
 #include <mutex>
@@ -13,6 +16,8 @@ struct Aggregate {
     std::uint64_t failures = 0;
     double totalMilliseconds = 0.0;
     double maximumMilliseconds = 0.0;
+    std::uint64_t dependencyEdges = 0;
+    double dependencyResolutionMilliseconds = 0.0;
 };
 
 std::mutex &profileMutex() {
@@ -38,6 +43,28 @@ std::unordered_map<std::string, GpuAggregate> &gpuProfileData() {
 
 } // namespace
 
+GpuTransferExecutionProfile getGpuTransferExecutionProfile() {
+    GpuTransferExecutionProfile result;
+#ifdef ZENO_AETHER_ENABLE_TRANSFER_PROFILER
+    const auto snapshot = zs::transfer_profile::snapshot();
+    result.hostToDeviceCalls = snapshot.h_to_d_calls;
+    result.hostToDeviceBytes = snapshot.h_to_d_bytes;
+    result.deviceToHostCalls = snapshot.d_to_h_calls;
+    result.deviceToHostBytes = snapshot.d_to_h_bytes;
+    result.deviceToDeviceCalls = snapshot.d_to_d_calls;
+    result.deviceToDeviceBytes = snapshot.d_to_d_bytes;
+    result.genericCalls = snapshot.generic_calls;
+    result.genericBytes = snapshot.generic_bytes;
+#endif
+    return result;
+}
+
+void resetGpuTransferExecutionProfile() {
+#ifdef ZENO_AETHER_ENABLE_TRANSFER_PROFILER
+    zs::transfer_profile::reset();
+#endif
+}
+
 void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bool failed) {
     std::lock_guard<std::mutex> lock(profileMutex());
     auto &entry = profileData()[node];
@@ -47,6 +74,14 @@ void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bo
     }
     entry.totalMilliseconds += elapsedMilliseconds;
     entry.maximumMilliseconds = std::max(entry.maximumMilliseconds, elapsedMilliseconds);
+}
+
+void recordNodeDependencyResolution(const std::string &node, std::uint64_t edges,
+                                      double elapsedMilliseconds) {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    auto &entry = profileData()[node];
+    entry.dependencyEdges += edges;
+    entry.dependencyResolutionMilliseconds += elapsedMilliseconds;
 }
 
 std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
@@ -63,6 +98,8 @@ std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
             row.averageMilliseconds = row.calls
                 ? row.totalMilliseconds / static_cast<double>(row.calls) : 0.0;
             row.maximumMilliseconds = item.second.maximumMilliseconds;
+            row.dependencyEdges = item.second.dependencyEdges;
+            row.dependencyResolutionMilliseconds = item.second.dependencyResolutionMilliseconds;
             result.emplace_back(std::move(row));
         }
     }
@@ -112,6 +149,17 @@ std::vector<GpuKernelExecutionProfile> getGpuKernelExecutionProfile() {
 void resetGpuKernelExecutionProfile() {
     std::lock_guard<std::mutex> lock(profileMutex());
     gpuProfileData().clear();
+}
+
+NodeDependencyProfileScope::NodeDependencyProfileScope(std::string node,
+                                                                     std::uint64_t edges)
+    : nodeName(std::move(node)), dependencyEdges(edges),
+      started(std::chrono::steady_clock::now()) {}
+
+NodeDependencyProfileScope::~NodeDependencyProfileScope() {
+    const auto elapsed = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - started).count();
+    recordNodeDependencyResolution(nodeName, dependencyEdges, elapsed);
 }
 
 NodeExecutionProfileScope::NodeExecutionProfileScope(std::string node)
