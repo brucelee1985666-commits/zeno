@@ -40,4 +40,10 @@ if (ZENO_AETHER_ENABLE_TASKFLOW AND ZENO_AETHER_BUILD_TASKFLOW_TESTS)
     target_link_libraries(zeno_aether_oldzenbase_particles_to_primitive_smoke PRIVATE zeno)
     add_test(NAME zeno_aether_oldzenbase_particles_to_primitive_smoke
         COMMAND zeno_aether_oldzenbase_particles_to_primitive_smoke)
+    add_executable(zeno_aether_oldzenbase_dispatcher_integration_smoke
+        tests/AetherNativeDispatcherIntegrationSmoke.cpp)
+    target_include_directories(zeno_aether_oldzenbase_dispatcher_integration_smoke PRIVATE include)
+    target_link_libraries(zeno_aether_oldzenbase_dispatcher_integration_smoke PRIVATE zeno)
+    add_test(NAME zeno_aether_oldzenbase_dispatcher_integration_smoke
+        COMMAND zeno_aether_oldzenbase_dispatcher_integration_smoke)
 endif()
