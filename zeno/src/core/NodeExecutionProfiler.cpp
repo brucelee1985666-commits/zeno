@@ -140,8 +140,8 @@ void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bo
     entry.totalMilliseconds += elapsedMilliseconds;
     entry.maximumMilliseconds = std::max(entry.maximumMilliseconds, elapsedMilliseconds);
 
-    // Keep a bounded-memory EWMA across graph executions. Current-run counters
-    // may be reset; historical estimates deliberately survive those resets.
+    // Keep one constant-space EWMA per observed (graph instance, node) pair.
+    // Current-run counters may be reset; history survives those resets.
     auto &history = historicalProfileData()[historicalNodeKey(node, graphIdentity)];
     constexpr double alpha = 0.20;
     history.meanApplyMilliseconds = history.samples == 0
