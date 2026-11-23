@@ -101,16 +101,17 @@ execution and visited-node reuse remain unchanged. The selected order and
 estimates are included in the execution report's `schedule` array, and
 `scheduler_mode` identifies the active policy.
 
-This is deliberately a conservative first scheduler stage. It reorders
-independent requested roots; it does not execute nodes concurrently, move
-arbitrary node implementations between CPU and CUDA, fuse kernels, or
-automatically change data residency. Zeno's current `INode::apply()` contract
+This is deliberately a conservative first scheduler stage. It recommends a
+priority order but does not reorder execution, because the current node API has
+no purity/side-effect or reorder-safety declaration. It does not execute nodes
+concurrently, move arbitrary node implementations between CPU and CUDA, fuse
+kernels, or automatically change data residency. Zeno's current `INode::apply()` contract
 does not expose a general dual-implementation/backend-capability interface,
 and aggregate CUDA/transfer counters are not yet attributable to individual
 nodes. Automatic CPU/GPU dispatch or transfer elimination without those
 contracts would be guesswork and is intentionally not enabled.
 
-The next safe extension requires explicit per-node backend capabilities,
+The next safe extension requires explicit per-node reorder-safety and backend capabilities,
 node-scoped GPU/transfer telemetry, and a data-residency/lifetime contract.
 Only then can the cost model compare CPU execution against CUDA execution plus
 the actual transfer cost and make a defensible dispatch decision.
