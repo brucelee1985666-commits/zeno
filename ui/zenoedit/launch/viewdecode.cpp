@@ -25,6 +25,8 @@
 
 namespace {
 
+std::string latestAetherReport;
+
 struct Header {
     size_t total_size;
     size_t info_size;
@@ -177,6 +179,10 @@ struct PacketProc {
                     pServer->onInitFrameRange(QString::fromStdString(action), beg, end);
                 }
             }
+
+        } else if (action == "aetherDiagnostics") {
+            latestAetherReport.assign(buf, len);
+            zeno::log_info("received Aether execution diagnostics ({} bytes)", len);
 
         } else if (action == "reportStatus") {
             std::string statJson{buf, len};
@@ -341,6 +347,11 @@ struct ViewDecodeData {
 
 } viewDecodeData;
 
+}
+
+std::string getLatestAetherExecutionReportJson()
+{
+    return latestAetherReport;
 }
 
 void viewDecodeFinish()
