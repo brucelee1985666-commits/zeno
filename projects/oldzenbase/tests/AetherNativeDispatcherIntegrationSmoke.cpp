@@ -44,10 +44,13 @@ int main() {
     auto consumer = makeNode(session, graph, "ParticlesToPrimitive", "consumer");
     consumer->inputBounds["pars"] = {"producer", "pars"};
     graph.nodes.emplace("consumer", std::move(consumer));
+    auto secondConsumer = makeNode(session, graph, "ParticlesToPrimitive", "consumer2");
+    secondConsumer->inputBounds["pars"] = {"producer", "pars"};
+    graph.nodes.emplace("consumer2", std::move(secondConsumer));
 
-    const auto plan = zeno::buildAetherExecutionPlan(graph, {"consumer"});
+    const auto plan = zeno::buildAetherExecutionPlan(graph, {"consumer", "consumer2"});
     assert(plan.allNodesCpuParallelSafe);
-    assert(plan.nodes.size() == 2);
+    assert(plan.nodes.size() == 3);
 
     const auto work = zeno::makeAetherOldzenbasePreparedWorkForPlan(graph, plan);
     const auto outputs = zeno::executeAetherPreparedPlanTaskflow(graph, plan, work);
@@ -79,6 +82,7 @@ int main() {
     // The explicit dispatcher and executor never write into legacy node outputs.
     assert(graph.nodes.at("producer")->outputs.empty());
     assert(graph.nodes.at("consumer")->outputs.empty());
+    assert(graph.nodes.at("consumer2")->outputs.empty());
 
     // A graph whose upstream binding changes after plan construction is rejected.
     graph.nodes.at("consumer")->inputBounds["pars"] = {"missing-node", "pars"};
