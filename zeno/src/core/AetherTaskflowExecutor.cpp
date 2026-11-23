@@ -1,14 +1,19 @@
 #include <zeno/core/AetherTaskflowExecutor.h>
 #include <taskflow/taskflow.hpp>
+#include <algorithm>
 #include <queue>
 #include <set>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 #if TF_VERSION < 301100 || TF_VERSION >= 400000
 #error "Aether currently supports Taskflow 3.11.x (C++17); Taskflow 4.x requires C++20"
 #endif
 namespace zeno {
-struct AetherTaskflowExecutor::Impl { tf::Executor executor; };
+struct AetherTaskflowExecutor::Impl {
+ Impl() : executor(std::max<std::size_t>(1, std::thread::hardware_concurrency())) {}
+ tf::Executor executor;
+};
 AetherTaskflowExecutor::AetherTaskflowExecutor() : impl_(std::make_unique<Impl>()) {}
 AetherTaskflowExecutor::~AetherTaskflowExecutor() = default;
 AetherTaskflowExecutor::AetherTaskflowExecutor(AetherTaskflowExecutor &&) noexcept = default;
