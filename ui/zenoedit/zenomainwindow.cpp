@@ -192,6 +192,49 @@ void ZenoMainWindow::initMenu()
         dialog.setWindowTitle(tr("Aether Execution Diagnostics"));
         dialog.resize(820, 620);
         auto *layout = new QVBoxLayout(&dialog);
+        const std::string previousReport = getPreviousAetherExecutionReportJson();
+        QString comparisonText = tr("No previous execution report is available yet.");
+        if (!previousReport.empty()) {
+            const auto previousDoc = QJsonDocument::fromJson(
+                QByteArray::fromStdString(previousReport));
+            const auto currentDoc = QJsonDocument::fromJson(
+                QByteArray::fromStdString(report));
+            if (previousDoc.isObject() && currentDoc.isObject()) {
+                const QJsonObject previousTotals =
+                    previousDoc.object().value("totals").toObject();
+                const QJsonObject currentTotals =
+                    currentDoc.object().value("totals").toObject();
+                auto deltaLine = [](const QString &label, double previous, double current) {
+                    const double delta = current - previous;
+                    const QString percent = previous > 0.0
+                        ? QString("%1%").arg(delta / previous * 100.0, 0, 'f', 1)
+                        : QString("n/a");
+                    return QString("%1: %2 ms -> %3 ms (%4% ms, %5)")
+                        .arg(label)
+                        .arg(previous, 0, 'f', 3)
+                        .arg(current, 0, 'f', 3)
+                        .arg(delta >= 0.0 ? "+" : "")
+                        .arg(delta, 0, 'f', 3)
+                        .arg(percent);
+                };
+                const double oldCpu = previousTotals.value("node_apply_ms").toDouble();
+                const double newCpu = currentTotals.value("node_apply_ms").toDouble();
+                const double oldGpu = previousTotals.value("gpu_kernel_ms").toDouble();
+                const double newGpu = currentTotals.value("gpu_kernel_ms").toDouble();
+                const double oldBytes = previousTotals.value("gpu_transfer_bytes").toDouble();
+                const double newBytes = currentTotals.value("gpu_transfer_bytes").toDouble();
+                comparisonText = tr("Change versus previous captured graph execution:\n%1\n%2\nGPU transfer bytes: %3 -> %4 (%5)")
+                    .arg(deltaLine(tr("Node apply"), oldCpu, newCpu))
+                    .arg(deltaLine(tr("Instrumented GPU kernels"), oldGpu, newGpu))
+                    .arg(QString::number(static_cast<qulonglong>(oldBytes)))
+                    .arg(QString::number(static_cast<qulonglong>(newBytes)))
+                    .arg(newBytes >= oldBytes ? "+" : "")
+                    .arg(QString::number(static_cast<qlonglong>(newBytes - oldBytes)));
+            }
+        }
+        auto *comparisonLabel = new QLabel(comparisonText, &dialog);
+        comparisonLabel->setWordWrap(true);
+        layout->addWidget(comparisonLabel);
         auto *editor = new QPlainTextEdit(&dialog);
         editor->setReadOnly(true);
         editor->setLineWrapMode(QPlainTextEdit::NoWrap);
