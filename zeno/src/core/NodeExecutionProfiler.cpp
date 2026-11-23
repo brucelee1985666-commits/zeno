@@ -287,6 +287,11 @@ AetherExecutionProfileScope::~AetherExecutionProfileScope() {
 AetherExecutionReport getAetherExecutionReport() {
     AetherExecutionReport report;
     report.executionId = activeExecutionId().load(std::memory_order_relaxed);
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+    report.schedulerMode = "history_critical_path_root_order";
+#else
+    report.schedulerMode = "legacy_input_order";
+#endif
     report.nodes = getNodeExecutionProfile();
     report.gpuKernels = getGpuKernelExecutionProfile();
     report.schedule = getAetherScheduleOrder();
@@ -340,6 +345,14 @@ AetherExecutionReport getAetherExecutionReport() {
         report.findings.emplace_back(finding.str());
     }
 
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+    report.findings.emplace_back(
+        "Smart scheduler reorders only requested graph roots using historical CPU apply EWMA and the longest known dependency path; dependencies remain on the existing recursive execution path.");
+#else
+    report.findings.emplace_back(
+        "Smart scheduler is disabled; graph roots retain the legacy input order.");
+#endif
+
     if (report.totalDependencyResolutionMilliseconds > 0.0) {
         report.findings.emplace_back(
             "Dependency resolution is reported separately; it can include upstream node execution and must not be added to node apply time as independent wall-clock cost.");
@@ -352,6 +365,7 @@ std::string getAetherExecutionReportJson() {
     std::ostringstream out;
     out << "{\n  \"schema\": \"zeno.aether.execution-report.v1\",\n";
     out << "  \"execution_id\": " << report.executionId << ",\n";
+    out << "  \"scheduler_mode\": \"" << jsonEscape(report.schedulerMode) << "\",\n";
     out << "  \"totals\": {\n";
     out << "    \"node_apply_ms\": "; jsonNumber(out, report.totalNodeApplyMilliseconds); out << ",\n";
     out << "    \"dependency_resolution_ms\": "; jsonNumber(out, report.totalDependencyResolutionMilliseconds); out << ",\n";
