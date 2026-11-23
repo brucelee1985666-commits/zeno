@@ -233,7 +233,7 @@ static int runner_start(std::string const &progJson, int sessionid, const LAUNCH
 #ifdef ZENO_AETHER_ENABLE_PROFILER
             {
                 const std::string aetherReport = zeno::getAetherExecutionReportJson();
-                send_packet("{\\"action\\":\\"aetherDiagnostics\\"}",
+                send_packet("{\"action\":\"aetherDiagnostics\"}",
                             aetherReport.data(), aetherReport.size());
             }
 #endif
