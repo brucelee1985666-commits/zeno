@@ -56,17 +56,18 @@ invocation-owned output maps.
 
 ## Remaining engineering gates
 
-1. Obtain a completed remote CI run for both the default-off core build and
-   the Taskflow 3.11 configure/build/CTest matrix.
+1. Obtain a successful remote CI run for both the default-off core build and
+   the Taskflow 3.11 configure/build/CTest matrix. The dispatcher integration
+   smoke test is now registered and covers producer/consumer dependencies,
+   muted outputs, graph-output isolation, and stale-plan rejection.
 2. Run race-sanitizer or equivalent stress tests on a supported environment;
    the current CPU CI does not prove absence of data races.
-3. Add a full graph integration test for the explicit dispatcher, including
-   producer/consumer dependencies, muted outputs, and stale-plan rejection.
-4. Review object lifetime and aliasing across multiple callbacks; current
-   `zany` snapshots hold shared pointers and are not deep copies.
-5. Benchmark against the legacy executor before enabling any automatic
-   scheduling. There is currently no automatic routing and no performance
-   claim.
+3. Complete a focused object-lifetime and aliasing review across multiple
+   callbacks. `zany` snapshots hold shared pointers and are not deep copies;
+   callback inputs must remain read-only and outputs invocation-owned.
+4. Benchmark representative graphs against the legacy executor before
+   enabling any automatic scheduling. There is currently no automatic routing
+   and no performance claim.
 
 ## Current limitations
 
