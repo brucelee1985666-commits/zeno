@@ -129,7 +129,7 @@ ZENO_API void Graph::applyNodes(std::set<std::string> const &ids) {
             if (nodeIt == nodes.end()) return 0.0;
             visiting.insert(nodeId);
 
-            const auto estimate = getAetherNodeCostEstimate(nodeId);
+            const auto estimate = getAetherNodeCostEstimate(nodeId, this);
             sampleCache[nodeId] = estimate.samples;
             double longestDependencyPath = 0.0;
             for (const auto &binding : nodeIt->second->inputBounds) {
