@@ -43,6 +43,10 @@ int main() {
     graph.nodes.at("sink")->inputBounds["in"] = {"source", "out"};
     addNode(graph, "writer-a", true, true);
     addNode(graph, "writer-b", true, true);
+    addNode(graph, "cycle-a", true);
+    addNode(graph, "cycle-b", true);
+    graph.nodes.at("cycle-a")->inputBounds["in"] = {"cycle-b", "out"};
+    graph.nodes.at("cycle-b")->inputBounds["in"] = {"cycle-a", "out"};
 
     const auto plan = zeno::buildAetherExecutionPlan(
         graph, std::set<std::string>{"sink", "writer-a", "writer-b"});
@@ -56,7 +60,8 @@ int main() {
     assert(plan.unorderedResourceHazards.front().resource == "shared-buffer");
 
     const auto cycle = zeno::buildAetherExecutionPlan(
-        graph, std::set<std::string>{"source"});
-    assert(!cycle.hasDependencyCycle);
+        graph, std::set<std::string>{"cycle-a"});
+    assert(cycle.hasDependencyCycle);
+    assert(!cycle.allNodesCpuParallelSafe);
     return 0;
 }
