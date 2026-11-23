@@ -9,6 +9,7 @@ namespace zeno {
 bool isAetherTransformMeshNode(INode const &node) noexcept;
 bool isAetherGeoVertexVelNode(INode const &node) noexcept;
 bool isAetherPrimitiveToParticlesNode(INode const &node) noexcept;
+bool isAetherParticlesToPrimitiveNode(INode const &node) noexcept;
 
 // Callbacks read prepared inputs only and return invocation-owned outputs.
 // They never call INode::apply() or mutate shared input objects.
@@ -16,6 +17,7 @@ bool isAetherPrimitiveToParticlesNode(INode const &node) noexcept;
 AetherPreparedNodeWork makeAetherTransformMeshPreparedWork();
 AetherPreparedNodeWork makeAetherGeoVertexVelPreparedWork();
 AetherPreparedNodeWork makeAetherPrimitiveToParticlesPreparedWork();
+AetherPreparedNodeWork makeAetherParticlesToPrimitivePreparedWork();
 #endif
 
 } // namespace zeno
