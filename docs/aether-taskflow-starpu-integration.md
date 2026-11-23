@@ -105,3 +105,18 @@ ctest --output-on-failure -R zeno_aether_capability_smoke
 ```
 
 No node implementation opts in as part of this PR. The audit intentionally demonstrates conservative behavior; measured speedups must come from a real target machine and representative Zeno workloads.
+
+
+## Audited plan to Taskflow bridge (PR #6)
+
+The new `executeAetherExecutionPlanTaskflow` function connects the diagnostic plan to the existing Taskflow adapter without invoking Zeno nodes. It accepts callbacks keyed by node ID; callers must prepare immutable inputs and isolated outputs before dispatch.
+
+Safety gates run before any callback:
+- Reject an empty plan, missing dependencies, dependency cycles, unordered resource hazards, or a plan not marked fully CPU-parallel-safe.
+- Require a non-empty prepared callback for every plan node.
+- Preserve the audited dependency edges when constructing Taskflow tasks.
+- Let Taskflow wait for completion and propagate callback exceptions.
+
+This is intentionally a bridge for pre-materialized work, not a direct `INode::apply()` integration. It does not resolve Zeno inputs, touch `Graph::ctx`, mutate graph state, or opt existing nodes into parallel execution. A future production adapter still needs a single-threaded preparation phase, explicit output ownership, cancellation/error policy, and lifetime guarantees.
+
+The optional Taskflow test now covers a two-branch dependency join and verifies that an unsafe plan is rejected before dispatch. Build/run it with `ZENO_AETHER_ENABLE_TASKFLOW=ON` and `ZENO_AETHER_BUILD_TASKFLOW_TESTS=ON`. This test has been authored but has not been compiled or executed in this environment.
