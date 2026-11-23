@@ -16,6 +16,9 @@ int main() {
         zeno::AetherExecutionPlanNode node;
         node.id = id;
         node.cpuParallelSafe = true;
+        node.capabilities.cpuThreadSafe = true;
+        node.capabilities.sideEffectFree = true;
+        node.capabilities.deterministic = true;
         plan.nodes.push_back(node);
     }
     plan.dependencyEdges = {{0, 2}, {1, 2}};
