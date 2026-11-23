@@ -80,7 +80,7 @@ index 2222222..3333333 100644
  
  #include <iostream>
  
-@@ -85,19 +87,31 @@
+@@ -80,19 +82,31 @@
    }
    void copy(device_mem_tag, void *dst, void *src, size_t size, const source_location &loc) {
      /// @note
@@ -112,7 +112,7 @@ index 2222222..3333333 100644
 +#endif
      // cudaDeviceSynchronize();
    }
-@@ -165,13 +179,25 @@
+@@ -164,13 +178,25 @@
    }
    void copy(um_mem_tag, void *dst, void *src, size_t size, const source_location &loc) {
      cuMemcpy((CUdeviceptr)dst, (CUdeviceptr)src, size);
