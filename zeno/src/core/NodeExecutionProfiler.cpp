@@ -50,8 +50,8 @@ std::atomic<std::uint64_t> &executionSequence() {
     return sequence;
 }
 
-std::uint64_t &activeExecutionId() {
-    static std::uint64_t id = 0;
+std::atomic<std::uint64_t> &activeExecutionId() {
+    static std::atomic<std::uint64_t> id{0};
     return id;
 }
 
@@ -218,7 +218,9 @@ AetherExecutionProfileScope::AetherExecutionProfileScope() {
         resetNodeExecutionProfile();
         resetGpuKernelExecutionProfile();
         resetGpuTransferExecutionProfile();
-        activeExecutionId() = executionSequence().fetch_add(1, std::memory_order_relaxed) + 1;
+        activeExecutionId().store(
+            executionSequence().fetch_add(1, std::memory_order_relaxed) + 1,
+            std::memory_order_relaxed);
     }
 }
 
@@ -228,7 +230,7 @@ AetherExecutionProfileScope::~AetherExecutionProfileScope() {
 
 AetherExecutionReport getAetherExecutionReport() {
     AetherExecutionReport report;
-    report.executionId = activeExecutionId();
+    report.executionId = activeExecutionId().load(std::memory_order_relaxed);
     report.nodes = getNodeExecutionProfile();
     report.gpuKernels = getGpuKernelExecutionProfile();
     report.gpuTransfers = getGpuTransferExecutionProfile();
