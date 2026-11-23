@@ -109,6 +109,7 @@ jobs:
           zeno_aether_oldzenbase_transform_mesh_smoke
           zeno_aether_oldzenbase_geo_vertex_vel_smoke
           zeno_aether_oldzenbase_primitive_to_particles_smoke
+          zeno_aether_oldzenbase_particles_to_primitive_smoke
 
       - name: Run Aether smoke tests
         run: ctest --test-dir build-aether --output-on-failure
