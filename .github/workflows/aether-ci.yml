@@ -38,6 +38,7 @@ jobs:
           -DZENO_BUILD_EDITOR=OFF
           -DZENO_BUILD_DESIGNER=OFF
           -DZENO_BUILD_PLAYER=OFF
+          -DZENO_WITH_oldzenbase=ON
           -DZENO_WITH_CUDA=OFF
           -DZENO_WITH_PYTHON3=OFF
           -DZENO_USE_CCACHE=OFF
@@ -82,6 +83,7 @@ jobs:
           -DZENO_BUILD_EDITOR=OFF
           -DZENO_BUILD_DESIGNER=OFF
           -DZENO_BUILD_PLAYER=OFF
+          -DZENO_WITH_oldzenbase=ON
           -DZENO_WITH_CUDA=OFF
           -DZENO_WITH_PYTHON3=OFF
           -DZENO_USE_CCACHE=OFF
@@ -104,6 +106,7 @@ jobs:
           zeno_aether_taskflow_smoke
           zeno_aether_plan_taskflow_smoke
           zeno_aether_prepared_taskflow_smoke
+          zeno_aether_oldzenbase_transform_mesh_smoke
 
       - name: Run Aether smoke tests
         run: ctest --test-dir build-aether --output-on-failure
