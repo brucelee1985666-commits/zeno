@@ -12,7 +12,7 @@ index 0000000..1111111
 +namespace zs {
 +namespace transfer_profile {
 +
-+enum class Direction : unsigned { HtoD = 0, DtoH = 1, DtoD = 2, Count = 3 };
++enum class Direction : unsigned { HtoD = 0, DtoH = 1, DtoD = 2, Generic = 3, Count = 4 };
 +
 +struct Snapshot {
 +  std::uint64_t h_to_d_bytes = 0;
@@ -21,11 +21,13 @@ index 0000000..1111111
 +  std::uint64_t h_to_d_calls = 0;
 +  std::uint64_t d_to_h_calls = 0;
 +  std::uint64_t d_to_d_calls = 0;
++  std::uint64_t generic_bytes = 0;
++  std::uint64_t generic_calls = 0;
 +};
 +
 +struct Counters {
-+  std::atomic<std::uint64_t> bytes[3]{{0}, {0}, {0}};
-+  std::atomic<std::uint64_t> calls[3]{{0}, {0}, {0}};
++  std::atomic<std::uint64_t> bytes[4]{{0}, {0}, {0}, {0}};
++  std::atomic<std::uint64_t> calls[4]{{0}, {0}, {0}, {0}};
 +};
 +
 +inline Counters &counters() {
@@ -50,12 +52,14 @@ index 0000000..1111111
 +  s.h_to_d_calls = c.calls[0].load(std::memory_order_relaxed);
 +  s.d_to_h_calls = c.calls[1].load(std::memory_order_relaxed);
 +  s.d_to_d_calls = c.calls[2].load(std::memory_order_relaxed);
++  s.generic_bytes = c.bytes[3].load(std::memory_order_relaxed);
++  s.generic_calls = c.calls[3].load(std::memory_order_relaxed);
 +  return s;
 +}
 +
 +inline void reset() noexcept {
 +  auto &c = counters();
-+  for (unsigned i = 0; i != 3; ++i) {
++  for (unsigned i = 0; i != 4; ++i) {
 +    c.bytes[i].store(0, std::memory_order_relaxed);
 +    c.calls[i].store(0, std::memory_order_relaxed);
 +  }
@@ -82,7 +86,7 @@ index 2222222..3333333 100644
      /// https://docs.nvidia.com/cuda/cuda-driver-api/api-sync-behavior.html#api-sync-behavior__memcpy-sync
      cuMemcpy((CUdeviceptr)dst, (CUdeviceptr)src, size);
 +#if defined(ZS_ENABLE_TRANSFER_PROFILER) && ZS_ENABLE_TRANSFER_PROFILER
-+    transfer_profile::record(transfer_profile::Direction::DtoD, size);
++    transfer_profile::record(transfer_profile::Direction::Generic, size);
 +#endif
      // cudaDeviceSynchronize();
    }
@@ -112,7 +116,7 @@ index 2222222..3333333 100644
    void copy(um_mem_tag, void *dst, void *src, size_t size, const source_location &loc) {
      cuMemcpy((CUdeviceptr)dst, (CUdeviceptr)src, size);
 +#if defined(ZS_ENABLE_TRANSFER_PROFILER) && ZS_ENABLE_TRANSFER_PROFILER
-+    transfer_profile::record(transfer_profile::Direction::DtoD, size);
++    transfer_profile::record(transfer_profile::Direction::Generic, size);
 +#endif
    }
    void copyHtoD(um_mem_tag, void *dst, void *src, size_t size, const source_location &loc) {

@@ -2,7 +2,7 @@
 
 Target: ZPC submodule revision `2739e7b6a71407be26dbc1a9b66ffcf597f031f8`.
 
-This patch adds opt-in, process-wide atomic counters for explicit CUDA Driver API copy calls in the ZPC CUDA memory backend. It distinguishes host-to-device, device-to-host, and device-to-device bytes and call counts. It does not synchronize the GPU and does not alter copy ordering.
+This patch adds opt-in, process-wide atomic counters for explicit CUDA Driver API copy calls in the ZPC CUDA memory backend. It distinguishes host-to-device, device-to-host, and device-to-device and generic-copy bytes and call counts. Generic `cuMemcpy` traffic is kept in its own bucket because its pointer direction should not be assumed. It does not synchronize the GPU and does not alter copy ordering.
 
 ## Apply
 
@@ -23,7 +23,7 @@ Include `zensim/cuda/memory/TransferProfiler.hpp` and call:
 
 - Counts explicit copies only; Unified Memory page migration is not observed.
 - Counts copies routed through these ZPC functions only; direct CUDA calls elsewhere bypass it.
-- `copy()` is classified as device-to-device because this implementation calls `cuMemcpy` with device pointers.
+- Generic `copy()` calls are reported separately; they are not folded into HtoD, DtoH, or DtoD without pointer-direction proof.
 - Counters are process-wide, not per-device or per-node. A future refinement can add device/context attribution.
 - These counters measure requested bytes, not physical PCIe traffic, latency, or bandwidth.
 - Snapshot loads are individually atomic but are not a globally consistent simultaneous snapshot while copies are running.
