@@ -6,6 +6,9 @@
 #include <zeno/utils/log.h>
 #include <zeno/utils/Timer.h>
 #include <zeno/core/Graph.h>
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+#include <zeno/core/NodeExecutionProfiler.h>
+#endif
 #include <zeno/extra/GlobalState.h>
 #include <zeno/extra/GlobalComm.h>
 #include <zeno/extra/GlobalStatus.h>
@@ -227,6 +230,13 @@ static int runner_start(std::string const &progJson, int sessionid, const LAUNCH
             zeno::GraphException::catched([&] {
                 graph->applyNodesToExec();
             }, *session->globalStatus);
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+            {
+                const std::string aetherReport = zeno::getAetherExecutionReportJson();
+                send_packet("{\\"action\\":\\"aetherDiagnostics\\"}",
+                            aetherReport.data(), aetherReport.size());
+            }
+#endif
             session->globalState->substepEnd();
             if (session->globalStatus->failed())
                 return onfail();
