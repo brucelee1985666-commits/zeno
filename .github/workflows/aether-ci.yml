@@ -1,0 +1,105 @@
+name: Aether CPU CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "aether/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aether-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-default-off:
+    name: Core build (Aether backends disabled)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Zeno
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: Configure core without optional Aether dependencies
+        run: >
+          cmake -S . -B build-core -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DZENO_BUILD_EDITOR=OFF
+          -DZENO_BUILD_DESIGNER=OFF
+          -DZENO_BUILD_PLAYER=OFF
+          -DZENO_WITH_CUDA=OFF
+          -DZENO_WITH_PYTHON3=OFF
+          -DZENO_USE_CCACHE=OFF
+          -DZENO_NO_WARNING=OFF
+          -DZENO_ENABLE_OPENMP=OFF
+          -DZENO_BENCHMARKING=OFF
+          -DZENO_AETHER_ENABLE_TASKFLOW=OFF
+          -DZENO_AETHER_BUILD_TASKFLOW_TESTS=OFF
+          -DZENO_AETHER_BUILD_CAPABILITY_TESTS=OFF
+
+      - name: Build Zeno core
+        run: cmake --build build-core --target zeno --parallel 2
+
+  aether-taskflow:
+    name: Aether contracts and Taskflow 3.11 tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Zeno
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned Taskflow 3.11.0
+        uses: actions/checkout@v4
+        with:
+          repository: taskflow/taskflow
+          ref: v3.11.0
+          path: .ci/taskflow
+          persist-credentials: false
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: Configure Aether tests
+        run: >
+          cmake -S . -B build-aether -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DZENO_BUILD_EDITOR=OFF
+          -DZENO_BUILD_DESIGNER=OFF
+          -DZENO_BUILD_PLAYER=OFF
+          -DZENO_WITH_CUDA=OFF
+          -DZENO_WITH_PYTHON3=OFF
+          -DZENO_USE_CCACHE=OFF
+          -DZENO_NO_WARNING=OFF
+          -DZENO_ENABLE_OPENMP=OFF
+          -DZENO_BENCHMARKING=OFF
+          -DZENO_AETHER_ENABLE_TASKFLOW=ON
+          -DZENO_AETHER_BUILD_TASKFLOW_TESTS=ON
+          -DZENO_AETHER_BUILD_CAPABILITY_TESTS=ON
+          -DTASKFLOW_ROOT=${{ github.workspace }}/.ci/taskflow
+
+      - name: Build Aether smoke-test targets
+        run: >
+          cmake --build build-aether --parallel 2
+          --target
+          zeno_aether_capability_smoke
+          zeno_aether_prepared_inputs_smoke
+          zeno_aether_taskflow_smoke
+          zeno_aether_plan_taskflow_smoke
+          zeno_aether_prepared_taskflow_smoke
+
+      - name: Run Aether smoke tests
+        run: ctest --test-dir build-aether --output-on-failure
