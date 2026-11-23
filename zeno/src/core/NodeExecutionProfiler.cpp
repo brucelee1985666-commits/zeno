@@ -142,12 +142,14 @@ void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bo
 
     // Keep one constant-space EWMA per observed (graph instance, node) pair.
     // Current-run counters may be reset; history survives those resets.
-    auto &history = historicalProfileData()[historicalNodeKey(node, graphIdentity)];
-    constexpr double alpha = 0.20;
-    history.meanApplyMilliseconds = history.samples == 0
-        ? elapsedMilliseconds
-        : alpha * elapsedMilliseconds + (1.0 - alpha) * history.meanApplyMilliseconds;
-    ++history.samples;
+    if (!failed) {
+        auto &history = historicalProfileData()[historicalNodeKey(node, graphIdentity)];
+        constexpr double alpha = 0.20;
+        history.meanApplyMilliseconds = history.samples == 0
+            ? elapsedMilliseconds
+            : alpha * elapsedMilliseconds + (1.0 - alpha) * history.meanApplyMilliseconds;
+        ++history.samples;
+    }
 }
 
 void recordNodeDependencyResolution(const std::string &node, std::uint64_t edges,
