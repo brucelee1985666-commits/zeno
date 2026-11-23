@@ -8,6 +8,7 @@
 #include "dbg_printf.h"
 #include <cassert>
 #include <cuda.h>
+#include "../CudaKernelProfiler.cuh"
 #include <zeno/core/Graph.h>
 #include <zeno/extra/GlobalState.h>
 #include <zeno/types/DictObject.h>
@@ -289,10 +290,14 @@ struct ZSVolumeWrangler : zeno::INode {
             void *addr = daccessors.data();
             void *args[4] = {(void *)&cnt, (void *)&d_params, (void *)&nchns, (void *)&addr};
 
+            auto launchStream = (CUstream)currentContext.streamSpare(-1);
+            CudaKernelProfileScope gpuProfile("ZSVolumeWrangler", launchStream);
             cuLaunchKernel((CUfunction)function, (cnt + 127) / 128, 1, 1, 128, 1, 1, 0,
-                           (CUstream)currentContext.streamSpare(-1), args, (void **)nullptr);
+                           launchStream, args, (void **)nullptr);
+            gpuProfile.finish();
             // end kernel launch
             cuCtxSynchronize();
+            gpuProfile.collect();
         }
 
         set_output("ZSGrid", get_input("ZSGrid"));

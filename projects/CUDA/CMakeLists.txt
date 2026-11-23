@@ -17,6 +17,12 @@ set(ZS_ENABLE_OPENVDB ON)
 set(ZENSIM_INSTALL OFF)
 set(ZS_BUILD_SHARED_LIBS ON)
 set(ZS_ENABLE_ZENO_CU_WRANGLE ON)
+
+option(ZENO_AETHER_ENABLE_TRANSFER_PROFILER "Expose opt-in ZPC explicit CUDA transfer counters" OFF)
+if (ZENO_AETHER_ENABLE_TRANSFER_PROFILER)
+  # Set before adding ZPC so its own profiler option is enabled in the subproject.
+  set(ZS_ENABLE_TRANSFER_PROFILER ON CACHE BOOL "Count explicit ZPC CUDA memory-copy calls" FORCE)
+endif()
 set(CMAKE_CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 set(PYZPC_GIT_PROXY "none" CACHE STRING "Git proxy used to clone PyZPC repository.")
 
@@ -25,6 +31,10 @@ find_package(Eigen3 REQUIRED)
 
 set(WHEREAMI_BUILD_SHARED_LIBS ON)
 add_subdirectory(zpc)
+
+if (ZENO_AETHER_ENABLE_TRANSFER_PROFILER)
+  target_compile_definitions(zeno PRIVATE ZENO_AETHER_ENABLE_TRANSFER_PROFILER=1)
+endif()
 
 if (ZS_PYTHON_FOUND)
   target_link_libraries(zeno PRIVATE zpc_jit_py)

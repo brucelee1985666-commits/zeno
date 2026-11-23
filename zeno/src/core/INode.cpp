@@ -1,4 +1,7 @@
 #include <zeno/core/INode.h>
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+#include <zeno/core/NodeExecutionProfiler.h>
+#endif
 #include <zeno/core/Graph.h>
 #include <zeno/core/Descriptor.h>
 #include <zeno/core/Session.h>
@@ -132,16 +135,35 @@ ZENO_API void INode::preApply() {
         }
     }
 #endif
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+    {
+        NodeDependencyProfileScope dependencyProfile(myname, inputBounds.size());
+        for (auto const &[ds, bound]: inputBounds) {
+            requireInput(ds);
+        }
+    }
+#else
     for (auto const &[ds, bound]: inputBounds) {
         requireInput(ds);
     }
+#endif
 
     log_debug("==> enter {}", myname);
     {
 #ifdef ZENO_BENCHMARKING
         Timer _(myname);
 #endif
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+        NodeExecutionProfileScope profile(myname);
+        try {
+            apply();
+        } catch (...) {
+            profile.markFailed();
+            throw;
+        }
+#else
         apply();
+#endif
 #if 0
         if (bTmpCache)
             writeTmpCaches();

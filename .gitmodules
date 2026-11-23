@@ -21,7 +21,7 @@
 	url = https://github.com/zenustech/bullet3.git
 [submodule "projects/CUDA/zpc"]
 	path = projects/CUDA/zpc
-	url = https://github.com/zenustech/zpc.git
+	url = https://github.com/brucelee1985666-commits/zpc.git
 [submodule "projects/python/CPython"]
 	path = projects/Python/CPython
 	url = https://github.com/zenustech/python-cmake-buildsystem.git
