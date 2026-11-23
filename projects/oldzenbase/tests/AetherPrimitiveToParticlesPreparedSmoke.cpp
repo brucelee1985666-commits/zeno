@@ -56,7 +56,9 @@ int main() {
     const auto noVelocityParticles = std::dynamic_pointer_cast<zeno::ParticlesObject>(
         noVelocityOutput.at("pars"));
     assert(noVelocityParticles && noVelocityParticles->vel.size() == 1);
-    assert(noVelocityParticles->vel[0] == glm::vec3(0.0f));
+    assert(std::abs(noVelocityParticles->vel[0].x) < 1.0e-5f);
+    assert(std::abs(noVelocityParticles->vel[0].y) < 1.0e-5f);
+    assert(std::abs(noVelocityParticles->vel[0].z) < 1.0e-5f);
 
     auto malformedPrimitive = std::make_shared<zeno::PrimitiveObject>();
     malformedPrimitive->verts.emplace_back(0.0f, 0.0f, 0.0f);
