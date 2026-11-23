@@ -91,7 +91,13 @@ struct TransformMesh : zeno::INode {
   }
 
   void apply() override {
-    set_output("mesh", transformMesh(inputs));
+    std::map<std::string, zany> resolvedInputs;
+    resolvedInputs.emplace("mesh", get_input("mesh"));
+    for (const char *socket : {"translate", "rotate", "scaling"}) {
+      if (has_input(socket))
+        resolvedInputs.emplace(socket, get_input(socket));
+    }
+    set_output("mesh", transformMesh(resolvedInputs));
   }
 };
 
