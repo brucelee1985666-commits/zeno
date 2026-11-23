@@ -35,8 +35,7 @@ int main() {
     const auto plan = zeno::buildAetherExecutionPlan(graph, {"transform"});
     assert(plan.allNodesCpuParallelSafe);
 
-    std::map<std::string, zeno::AetherPreparedNodeWork> work;
-    work.emplace("transform", zeno::makeAetherTransformMeshPreparedWork());
+    const auto work = zeno::makeAetherOldzenbasePreparedWorkForPlan(graph, plan);
     const auto outputs = zeno::executeAetherPreparedPlanTaskflow(graph, plan, work);
     const auto transformed = std::dynamic_pointer_cast<zeno::MeshObject>(
         outputs.at("transform").at("mesh"));
