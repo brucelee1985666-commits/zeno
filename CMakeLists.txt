@@ -229,6 +229,9 @@ endif()
 
 add_subdirectory(projects)
 
+# Optional Zeno Aether integrations (all disabled by default).
+include(cmake/ZenoAether.cmake)
+
 if (ZENO_BUILD_DESIGNER)
     message(STATUS "Building Zeno Designer")
     add_subdirectory(ui/zenodesign)
