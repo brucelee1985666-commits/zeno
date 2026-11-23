@@ -3,6 +3,7 @@ option(ZENO_PARALLEL_STL "Enable parallel STL in ZENO" OFF)
 option(ZENO_ENABLE_OPENMP "Enable OpenMP in ZENO for parallelism" ON)
 option(ZENO_ENABLE_MAGICENUM "Enable magicenum in ZENO for enum reflection" OFF)
 option(ZENO_ENABLE_BACKWARD "Enable ZENO fault handler for traceback" OFF)
+option(ZENO_AETHER_ENABLE_PROFILER "Enable thread-safe per-node execution profiling" OFF)
 
 file(GLOB_RECURSE source CONFIGURE_DEPENDS include/*.h src/*.cpp)
 
@@ -27,6 +28,10 @@ if (ZENO_ENABLE_OPENMP)
     else()
         message(WARNING "Not found OpenMP")
     endif()
+endif()
+
+if (ZENO_AETHER_ENABLE_PROFILER)
+    target_compile_definitions(zeno PUBLIC ZENO_AETHER_ENABLE_PROFILER=1)
 endif()
 
 if (ZENO_BENCHMARKING)

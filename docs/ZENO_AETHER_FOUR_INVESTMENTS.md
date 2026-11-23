@@ -111,3 +111,27 @@ performance tests establish the target.
 - Implement a single OpenVDB→NanoVDB conversion/upload node.
 - Audit the existing OptiX path and establish a reproducible reference scene.
 - Add a standalone Gaussian import/conversion prototype and license boundary.
+
+## ZenoCompute increment 1 — per-node execution profiler
+
+Implemented in the Aether branch:
+
+- `zeno/include/zeno/core/NodeExecutionProfiler.h`
+- `zeno/src/core/NodeExecutionProfiler.cpp`
+- Instrumentation around the actual `INode::apply()` call in
+  `zeno/src/core/INode.cpp`.
+- CMake switch in `zeno/CMakeLists.txt`:
+  `-DZENO_AETHER_ENABLE_PROFILER=ON` (default OFF).
+
+The profiler aggregates calls, failures, total/average/maximum milliseconds per
+node. Its registry is mutex-protected and snapshots are sorted by total time.
+The measured scope is the node's `apply()` body, not dependency traversal,
+input resolution, GPU kernel time, or asynchronous work launched by a node.
+Those require later CUDA-event and scheduler instrumentation.
+
+API:
+`zeno::getNodeExecutionProfile()`,
+`zeno::resetNodeExecutionProfile()`.
+
+The profiler is opt-in and does not alter default builds. It is a measurement
+foundation, not yet a UI panel or a complete CPU/GPU timeline.
