@@ -120,3 +120,38 @@ Safety gates run before any callback:
 This is intentionally a bridge for pre-materialized work, not a direct `INode::apply()` integration. It does not resolve Zeno inputs, touch `Graph::ctx`, mutate graph state, or opt existing nodes into parallel execution. A future production adapter still needs a single-threaded preparation phase, explicit output ownership, cancellation/error policy, and lifetime guarantees.
 
 The optional Taskflow test now covers a two-branch dependency join and verifies that an unsafe plan is rejected before dispatch. Build/run it with `ZENO_AETHER_ENABLE_TASKFLOW=ON` and `ZENO_AETHER_BUILD_TASKFLOW_TESTS=ON`. This test has been authored but has not been compiled or executed in this environment.
+
+
+## Non-mutating input preparation (PR #7)
+
+The next preparation stage adds `prepareAetherExecutionInputs` and an optional Taskflow dispatcher for prepared callbacks.
+
+### What it does
+- Validates the audited plan and rechecks each node's CPU-safety contract.
+- Copies each node's currently assigned static input map into an `AetherPreparedNodeInputs` snapshot.
+- Resolves graph-bound sockets by reading already-materialized upstream outputs (including a node's muted output when present).
+- Confirms every upstream dependency is inside the plan and that its requested output exists.
+- Builds all snapshots before dispatch; only after successful preparation does the Taskflow bridge schedule callbacks with the matching immutable-by-contract input snapshot.
+
+### What it deliberately does not do
+- Does not call `INode::requireInput`, `preApply`, `doApply`, or `Graph::applyNode`.
+- Does not write to `INode::inputs` or `outputs`, allocate or mutate `Graph::ctx`, or execute formulas/keyframes.
+- Rejects plans with missing outputs and nodes containing formula/keyframe metadata rather than guessing evaluation semantics.
+- Does not execute ordinary Zeno `INode::apply()`; callers provide specialized callbacks and must keep output ownership isolated.
+
+The snapshots copy `zany` shared pointers, not deep copies of the underlying `IObject` payloads. The callback contract is read-only for these input objects; any node that mutates an input object must not opt into this adapter until copy-on-write or explicit ownership is provided. This is a deliberate zero-copy staging choice, not a claim that shared objects are inherently immutable.
+
+### Smoke test
+The optional capability-test group now includes `AetherPreparedExecutionSmoke.cpp`. It checks linked-output capture, static-input capture, no mutation of the source graph, and rejection of unavailable outputs and dynamic formula inputs.
+
+Configure with:
+```sh
+-DZENO_AETHER_BUILD_CAPABILITY_TESTS=ON
+```
+
+Run:
+```sh
+ctest --output-on-failure -R zeno_aether_prepared_inputs_smoke
+```
+
+This test has been authored but not compiled or run in this environment. The adapter remains opt-in and does not change legacy execution.
