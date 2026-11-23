@@ -61,6 +61,24 @@ int main() {
     assert(result && result->size() == 1);
     assert(std::abs(result->attr<zeno::vec3f>("pos")[0][0] - 1.0f) < 1.0e-5f);
     assert(std::abs(result->attr<zeno::vec3f>("vel")[0][1] - 1.0f) < 1.0e-5f);
+    auto parallelResult = std::dynamic_pointer_cast<zeno::PrimitiveObject>(
+        outputs.at("consumer2").at("prim"));
+    assert(parallelResult && parallelResult->size() == 1);
+    assert(std::abs(parallelResult->attr<zeno::vec3f>("pos")[0][0] - 1.0f) < 1.0e-5f);
+
+    // Re-run the fan-out DAG repeatedly: both consumers execute concurrently
+    // and must keep their output storage isolated across invocations.
+    for (int iteration = 0; iteration < 32; ++iteration) {
+        const auto repeated = zeno::executeAetherPreparedPlanTaskflow(graph, plan, work);
+        auto repeatedA = std::dynamic_pointer_cast<zeno::PrimitiveObject>(
+            repeated.at("consumer").at("prim"));
+        auto repeatedB = std::dynamic_pointer_cast<zeno::PrimitiveObject>(
+            repeated.at("consumer2").at("prim"));
+        assert(repeatedA && repeatedB);
+        assert(std::abs(repeatedA->attr<zeno::vec3f>("pos")[0][0] - 1.0f) < 1.0e-5f);
+        assert(std::abs(repeatedB->attr<zeno::vec3f>("pos")[0][0] - 1.0f) < 1.0e-5f);
+    }
+
     // Both conversion callbacks allocate outputs and leave shared source objects untouched.
     assert(sourcePrimitive->size() == 1);
     assert(std::abs(sourcePrimitive->verts[0][0] - 1.0f) < 1.0e-5f);
