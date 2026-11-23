@@ -131,7 +131,7 @@ The Zeno submodule URL and gitlink are intentionally unchanged while the ZPC PR 
 ## ZenoCompute increment 6 — ZPC transfer counters connected to diagnostics
 
 The companion ZPC fork now has a minimal patch based directly on the exact submodule revision previously pinned by Zeno:
-- ZPC commit: `c3568f4e06b3a695290d74ccfeb9461760568be4`
+- ZPC commit: `53824963aecbb0c6b6f753734a2da5f84c449010`
 - Parent: original pinned ZPC revision `2739e7b6a71407be26dbc1a9b66ffcf597f031f8`
 - This avoids silently importing the fork's newer default-branch history.
 
@@ -141,4 +141,4 @@ Zeno integration in this branch:
 - Snapshot fields separate HtoD, DtoH, DtoD, and generic copy calls/bytes. Generic copies remain unclassified.
 - The existing dependency-resolution RAII scope is now declared and implemented in the profiler header/source, with cumulative edge counts and inclusive resolution time.
 
-The transfer counters are diagnostic data only. They do not synchronize CUDA, attribute transfers to individual nodes, observe Unified Memory page migration, or measure physical PCIe traffic/latency. The exact pinned-revision integration is tracked in ZPC PR #2 and is still under review. Build and runtime tests remain pending.
+Only successful CUDA Driver API copy calls are counted; failed copy calls are excluded. The transfer counters are diagnostic data only. They do not synchronize CUDA, attribute transfers to individual nodes, observe Unified Memory page migration, or measure physical PCIe traffic/latency. The exact pinned-revision integration is tracked in ZPC PR #3 and is still under review. Build and runtime tests remain pending.
