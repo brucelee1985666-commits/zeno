@@ -10,7 +10,7 @@
 namespace {
 class TestNode final : public zeno::INode {
 public:
-    explicit TestNode(bool safe) : safe_(safe) {}
+    explicit TestNode(bool safe, bool writeShared = false) : safe_(safe), writeShared_(writeShared) {}
     zeno::AetherNodeExecutionCapabilities getAetherExecutionCapabilities() const override {
         zeno::AetherNodeExecutionCapabilities caps;
         caps.cpuThreadSafe = safe_;
@@ -18,37 +18,45 @@ public:
         caps.deterministic = safe_;
         caps.hasCudaImplementation = safe_;
         caps.explicitResourceAccess = safe_;
+        if (writeShared_)
+            caps.resources.push_back({"shared-buffer", zeno::AetherResourceAccessMode::Write, 4096});
         return caps;
     }
 private:
     void apply() override {}
     bool safe_;
+    bool writeShared_;
 };
+
+void addNode(zeno::Graph &graph, const std::string &id, bool safe, bool writeShared = false) {
+    auto node = std::make_unique<TestNode>(safe, writeShared);
+    node->myname = id;
+    node->graph = &graph;
+    graph.nodes.emplace(id, std::move(node));
+}
 }
 
 int main() {
     zeno::Graph graph;
-    auto source = std::make_unique<TestNode>(true);
-    source->myname = "source";
-    source->graph = &graph;
-    graph.nodes.emplace("source", std::move(source));
+    addNode(graph, "source", true);
+    addNode(graph, "sink", false);
+    graph.nodes.at("sink")->inputBounds["in"] = {"source", "out"};
+    addNode(graph, "writer-a", true, true);
+    addNode(graph, "writer-b", true, true);
 
-    auto sink = std::make_unique<TestNode>(false);
-    sink->myname = "sink";
-    sink->graph = &graph;
-    sink->inputBounds["in"] = {"source", "out"};
-    graph.nodes.emplace("sink", std::move(sink));
-
-    const auto plan = zeno::buildAetherExecutionPlan(graph, std::set<std::string>{"sink"});
-    assert(plan.nodes.size() == 2);
+    const auto plan = zeno::buildAetherExecutionPlan(
+        graph, std::set<std::string>{"sink", "writer-a", "writer-b"});
+    assert(plan.nodes.size() == 4);
     assert(plan.dependencyEdges.size() == 1);
     assert(!plan.hasMissingNodes);
     assert(!plan.hasDependencyCycle);
     assert(!plan.allNodesCpuParallelSafe);
     assert(!plan.allNodesCudaReady);
-    assert(plan.nodes[0].id == "source");
-    assert(plan.nodes[1].id == "sink");
-    assert(plan.nodes[0].cpuParallelSafe);
-    assert(!plan.nodes[1].cpuParallelSafe);
+    assert(plan.unorderedResourceHazards.size() == 1);
+    assert(plan.unorderedResourceHazards.front().resource == "shared-buffer");
+
+    const auto cycle = zeno::buildAetherExecutionPlan(
+        graph, std::set<std::string>{"source"});
+    assert(!cycle.hasDependencyCycle);
     return 0;
 }
