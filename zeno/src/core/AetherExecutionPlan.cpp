@@ -25,8 +25,15 @@ void addCapabilityBlockers(AetherExecutionPlanNode &entry) {
     if (!caps.cpuThreadSafe) entry.blockers.emplace_back("CPU thread safety not declared");
     if (!caps.sideEffectFree) entry.blockers.emplace_back("side-effect freedom not declared");
     if (!caps.deterministic) entry.blockers.emplace_back("deterministic behavior not declared");
-    if (!caps.hasCudaImplementation) entry.blockers.emplace_back("CUDA implementation not declared");
-    if (!caps.explicitResourceAccess) entry.blockers.emplace_back("explicit resource access not declared");
+
+    // CUDA-specific prerequisites are relevant only after the CPU safety
+    // contract passes; do not report them as CPU execution blockers.
+    if (entry.cpuParallelSafe) {
+        if (!caps.hasCudaImplementation)
+            entry.blockers.emplace_back("CUDA implementation not declared");
+        if (!caps.explicitResourceAccess)
+            entry.blockers.emplace_back("explicit resource access not declared");
+    }
 }
 
 } // namespace
