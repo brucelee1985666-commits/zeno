@@ -62,16 +62,16 @@ std::string jsonEscape(const std::string &value) {
     for (unsigned char ch : value) {
         switch (ch) {
         case '"': out << "\\\""; break;
-        case '\\\\': out << "\\\\\\\\"; break;
-        case '\\b': out << "\\\\b"; break;
-        case '\\f': out << "\\\\f"; break;
-        case '\\n': out << "\\\\n"; break;
-        case '\\r': out << "\\\\r"; break;
-        case '\\t': out << "\\\\t"; break;
+        case '\\': out << "\\\\"; break;
+        case '\b': out << "\\b"; break;
+        case '\f': out << "\\f"; break;
+        case '\n': out << "\\n"; break;
+        case '\r': out << "\\r"; break;
+        case '\t': out << "\\t"; break;
         default:
             if (ch < 0x20) {
                 const char *hex = "0123456789abcdef";
-                out << "\\\\u00" << hex[(ch >> 4) & 0x0f] << hex[ch & 0x0f];
+                out << "\\u00" << hex[(ch >> 4) & 0x0f] << hex[ch & 0x0f];
             } else {
                 out << static_cast<char>(ch);
             }
