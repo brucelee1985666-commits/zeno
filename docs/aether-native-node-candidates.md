@@ -45,7 +45,6 @@ These are candidates for follow-up adapters, not approved opt-ins yet.
 
 | Node | Source | Static assessment | Gate before opt-in |
 |---|---|---|---|
-| `TransformMesh` | `projects/oldzenbase/mesh/TransformMesh.cpp` | Reads a mesh and optional numeric inputs, creates a new mesh, and writes only its own output. No global state is apparent in the inspected body. | Add tests for singular transforms, empty/mismatched mesh attributes, and confirm all input object accessors are read-only. |
 | `GeoVertexVel` | `projects/oldzenbase/mesh/PolyVelocity.cpp` | Reads two meshes and `dt`, creates a new particle object, and writes only its own output. | Validate equal vertex counts and nonzero `dt`; test malformed inputs before enabling. |
 | `PrimitiveToParticles` | `projects/oldzenbase/pars/PrimitiveToParticles.cpp` | Reads primitive attributes and creates a new particle object. No external side effects are apparent. | Test absent/malformed `pos` and `vel` attributes and confirm output ownership. |
 | `ParticlesToPrimitive` | `projects/oldzenbase/pars/ParticlesToPrimitive.cpp` | Reads particle arrays and creates a new primitive object. No external side effects are apparent. | Test unequal position/velocity lengths and attribute initialization. |
