@@ -111,3 +111,63 @@ jobs:
 
       - name: Run Aether smoke tests
         run: ctest --test-dir build-aether --output-on-failure
+
+  aether-tsan:
+    name: Aether dispatcher race-sanitizer smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Zeno
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned Taskflow 3.11.0
+        uses: actions/checkout@v4
+        with:
+          repository: taskflow/taskflow
+          ref: v3.11.0
+          path: .ci/taskflow
+          persist-credentials: false
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: Configure ThreadSanitizer dispatcher test
+        run: >
+          cmake -S . -B build-tsan -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-mavx2 -fsanitize=thread -fno-omit-frame-pointer -g"
+          -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+          -DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=thread
+          -DZENO_BUILD_EDITOR=OFF
+          -DZENO_BUILD_DESIGNER=OFF
+          -DZENO_BUILD_PLAYER=OFF
+          -DZENO_WITH_oldzenbase=ON
+          -DZENO_WITH_CUDA=OFF
+          -DZENO_WITH_PYTHON3=OFF
+          -DZENO_USE_CCACHE=OFF
+          -DZENO_NO_WARNING=OFF
+          -DZENO_ENABLE_OPENMP=OFF
+          -DZENO_BENCHMARKING=OFF
+          -DZENO_AETHER_ENABLE_TASKFLOW=ON
+          -DZENO_AETHER_ENABLE_PROFILER=OFF
+          -DZENO_AETHER_ENABLE_SMART_SCHEDULER=OFF
+          -DZENO_AETHER_BUILD_TASKFLOW_TESTS=ON
+          -DZENO_AETHER_BUILD_CAPABILITY_TESTS=ON
+          -DTASKFLOW_ROOT=${{ github.workspace }}/.ci/taskflow
+
+      - name: Build dispatcher integration smoke
+        run: >
+          cmake --build build-tsan --parallel 2
+          --target zeno_aether_oldzenbase_dispatcher_integration_smoke
+
+      - name: Run dispatcher integration under ThreadSanitizer
+        env:
+          TSAN_OPTIONS: halt_on_error=1 second_deadlock_stack=1
+        run: >
+          ctest --test-dir build-tsan
+          -R zeno_aether_oldzenbase_dispatcher_integration_smoke
+          --output-on-failure
