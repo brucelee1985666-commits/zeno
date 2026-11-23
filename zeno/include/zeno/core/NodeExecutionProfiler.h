@@ -108,6 +108,7 @@ ZENO_API void resetAetherScheduleOrder();
 
 struct AetherExecutionReport {
     std::uint64_t executionId = 0;
+    std::string schedulerMode = "legacy_input_order";
     std::vector<NodeExecutionProfile> nodes;
     std::vector<GpuKernelExecutionProfile> gpuKernels;
     std::vector<AetherScheduleEntry> schedule;
