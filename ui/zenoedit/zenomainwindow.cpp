@@ -42,6 +42,7 @@
 #include "viewport/optixviewport.h"
 #include "ui_zenomainwindow.h"
 #include <QJsonDocument>
+#include <QJsonObject>
 #include "dialog/zdocklayoutmangedlg.h"
 #include "panel/zenoimagepanel.h"
 #include "dialog/zshortcutsettingdlg.h"
@@ -175,6 +176,100 @@ void ZenoMainWindow::initMenu()
         connect(pAction, SIGNAL(triggered()), this, SLOT(onNewFile()));
  */
     setActionProperty();
+
+#ifdef ZENO_MULTIPROCESS
+    QAction *aetherDiagnosticsAction =
+        m_ui->menuTools->addAction(tr("Aether Execution Diagnostics..."));
+    connect(aetherDiagnosticsAction, &QAction::triggered, this, [this]() {
+        const std::string report = getLatestAetherExecutionReportJson();
+        if (report.empty()) {
+            QMessageBox::information(this, tr("Aether Diagnostics"),
+                tr("No Aether report has arrived yet. Run a graph with "
+                   "ZENO_AETHER_ENABLE_PROFILER=ON to collect diagnostics."));
+            return;
+        }
+
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Aether Execution Diagnostics"));
+        dialog.resize(820, 620);
+        auto *layout = new QVBoxLayout(&dialog);
+        const std::string previousReport = getPreviousAetherExecutionReportJson();
+        QString comparisonText = tr("No previous execution report is available yet.");
+        if (!previousReport.empty()) {
+            const auto previousDoc = QJsonDocument::fromJson(
+                QByteArray::fromStdString(previousReport));
+            const auto currentDoc = QJsonDocument::fromJson(
+                QByteArray::fromStdString(report));
+            if (previousDoc.isObject() && currentDoc.isObject()) {
+                const QJsonObject previousTotals =
+                    previousDoc.object().value("totals").toObject();
+                const QJsonObject currentTotals =
+                    currentDoc.object().value("totals").toObject();
+                auto deltaLine = [](const QString &label, double previous, double current) {
+                    const double delta = current - previous;
+                    const QString percent = previous > 0.0
+                        ? QString("%1%").arg(delta / previous * 100.0, 0, 'f', 1)
+                        : QString("n/a");
+                    return QString("%1: %2 ms -> %3 ms (%4%5 ms, %6)")
+                        .arg(label)
+                        .arg(previous, 0, 'f', 3)
+                        .arg(current, 0, 'f', 3)
+                        .arg(delta >= 0.0 ? "+" : "")
+                        .arg(delta, 0, 'f', 3)
+                        .arg(percent);
+                };
+                const double oldCpu = previousTotals.value("node_apply_ms").toDouble();
+                const double newCpu = currentTotals.value("node_apply_ms").toDouble();
+                const double oldGpu = previousTotals.value("gpu_kernel_ms").toDouble();
+                const double newGpu = currentTotals.value("gpu_kernel_ms").toDouble();
+                const double oldBytes = previousTotals.value("gpu_transfer_bytes").toDouble();
+                const double newBytes = currentTotals.value("gpu_transfer_bytes").toDouble();
+                comparisonText = tr("Change versus previous captured graph execution:\n%1\n%2\nGPU transfer bytes: %3 -> %4 (%5%6)")
+                    .arg(deltaLine(tr("Node apply"), oldCpu, newCpu))
+                    .arg(deltaLine(tr("Instrumented GPU kernels"), oldGpu, newGpu))
+                    .arg(QString::number(static_cast<qulonglong>(oldBytes)))
+                    .arg(QString::number(static_cast<qulonglong>(newBytes)))
+                    .arg(newBytes >= oldBytes ? "+" : "")
+                    .arg(QString::number(static_cast<qlonglong>(newBytes - oldBytes)));
+            }
+        }
+        auto *comparisonLabel = new QLabel(comparisonText, &dialog);
+        comparisonLabel->setWordWrap(true);
+        layout->addWidget(comparisonLabel);
+        auto *editor = new QPlainTextEdit(&dialog);
+        editor->setReadOnly(true);
+        editor->setLineWrapMode(QPlainTextEdit::NoWrap);
+        editor->setPlainText(QString::fromStdString(report));
+        layout->addWidget(editor);
+
+        auto *buttons = new QHBoxLayout();
+        auto *saveButton = new QPushButton(tr("Save JSON..."), &dialog);
+        auto *closeButton = new QPushButton(tr("Close"), &dialog);
+        buttons->addStretch();
+        buttons->addWidget(saveButton);
+        buttons->addWidget(closeButton);
+        layout->addLayout(buttons);
+
+        connect(saveButton, &QPushButton::clicked, &dialog, [&dialog, editor]() {
+            const QString path = QFileDialog::getSaveFileName(
+                &dialog, QObject::tr("Save Aether Diagnostics"),
+                "aether-execution-report.json",
+                QObject::tr("JSON files (*.json)"));
+            if (path.isEmpty()) return;
+            QFile file(path);
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                QMessageBox::warning(&dialog, QObject::tr("Save failed"),
+                    QObject::tr("Could not write the selected file."));
+                return;
+            }
+            const QByteArray bytes = editor->toPlainText().toUtf8();
+            file.write(bytes);
+            file.close();
+        });
+        connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+        dialog.exec();
+    });
+#endif
 
     QSettings settings(zsCompanyName, zsEditor);
     QVariant use_chinese = settings.value("use_chinese");

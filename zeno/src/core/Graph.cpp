@@ -1,4 +1,7 @@
 #include <zeno/core/Graph.h>
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+#include <zeno/core/NodeExecutionProfiler.h>
+#endif
 #include <zeno/core/INode.h>
 #include <zeno/core/IObject.h>
 #include <zeno/core/Session.h>
@@ -95,6 +98,9 @@ ZENO_API bool Graph::applyNode(std::string const &id) {
 }
 
 ZENO_API void Graph::applyNodes(std::set<std::string> const &ids) {
+#ifdef ZENO_AETHER_ENABLE_PROFILER
+    AetherExecutionProfileScope executionProfile;
+#endif
     ctx = std::make_unique<Context>();
 
     scope_exit _{[&] {

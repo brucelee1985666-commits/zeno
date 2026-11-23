@@ -25,6 +25,9 @@
 
 namespace {
 
+std::string latestAetherReport;
+std::string previousAetherReport;
+
 struct Header {
     size_t total_size;
     size_t info_size;
@@ -177,6 +180,12 @@ struct PacketProc {
                     pServer->onInitFrameRange(QString::fromStdString(action), beg, end);
                 }
             }
+
+        } else if (action == "aetherDiagnostics") {
+            if (!latestAetherReport.empty())
+                previousAetherReport = latestAetherReport;
+            latestAetherReport.assign(buf, len);
+            zeno::log_info("received Aether execution diagnostics ({} bytes)", len);
 
         } else if (action == "reportStatus") {
             std::string statJson{buf, len};
@@ -343,6 +352,16 @@ struct ViewDecodeData {
 
 }
 
+std::string getLatestAetherExecutionReportJson()
+{
+    return latestAetherReport;
+}
+
+std::string getPreviousAetherExecutionReportJson()
+{
+    return previousAetherReport;
+}
+
 void viewDecodeFinish()
 {
     viewDecodeData.finish();
@@ -362,6 +381,9 @@ void viewDecodeClear()
 {
     zeno::log_debug("viewDecodeClear");
     viewDecodeData.clear();
+    if (!latestAetherReport.empty())
+        previousAetherReport = latestAetherReport;
+    latestAetherReport.clear();
     packetProc.onStart();
 }
 
