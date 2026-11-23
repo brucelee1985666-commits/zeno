@@ -209,7 +209,7 @@ void ZenoMainWindow::initMenu()
                     const QString percent = previous > 0.0
                         ? QString("%1%").arg(delta / previous * 100.0, 0, 'f', 1)
                         : QString("n/a");
-                    return QString("%1: %2 ms -> %3 ms (%4% ms, %5)")
+                    return QString("%1: %2 ms -> %3 ms (%4%5 ms, %6)")
                         .arg(label)
                         .arg(previous, 0, 'f', 3)
                         .arg(current, 0, 'f', 3)
