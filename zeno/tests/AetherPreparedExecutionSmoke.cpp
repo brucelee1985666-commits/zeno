@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include <memory>
-#include <set>
 #include <stdexcept>
 #include <string>
 
@@ -35,9 +34,7 @@ int main() {
     addNode(graph, "source");
     addNode(graph, "consumer");
 
-    auto upstream = std::make_shared<zeno::IObject>();
     auto staticValue = std::make_shared<zeno::IObject>();
-    graph.nodes.at("source")->set_output("result", upstream);
     graph.nodes.at("consumer")->inputs["constant:"] = staticValue;
     graph.nodes.at("consumer")->inputBounds["linked"] = {"source", "result"};
 
@@ -47,27 +44,23 @@ int main() {
     assert(graph.ctx == nullptr);
     assert(!graph.nodes.at("consumer")->has_input("linked"));
 
+    // Preparation records immutable wiring; it does not require producer
+    // outputs to exist yet and does not mutate the graph.
     const auto snapshots = zeno::prepareAetherExecutionInputs(graph, plan);
     assert(snapshots.size() == 2);
     const auto &consumer = snapshots.at("consumer");
-    assert(consumer.values.at("linked") == upstream);
     assert(consumer.values.at("constant:") == staticValue);
+    assert(consumer.bindings.size() == 1);
+    assert(consumer.bindings.front().socket == "linked");
+    assert(consumer.bindings.front().sourceNode == "source");
+    assert(consumer.bindings.front().sourceSocket == "result");
+    assert(consumer.bindings.front().sourceNodeIndex == 0);
+    assert(!consumer.bindings.front().mutedSourceOutput);
 
-    // Preparation must not mutate the original node's input/output maps.
     assert(!graph.nodes.at("consumer")->has_input("linked"));
-    assert(graph.nodes.at("source")->outputs.at("result") == upstream);
+    assert(graph.nodes.at("source")->outputs.empty());
     assert(graph.ctx == nullptr);
 
-    graph.nodes.at("source")->outputs.erase("result");
-    bool rejectedMissingOutput = false;
-    try {
-        (void)zeno::prepareAetherExecutionInputs(graph, plan);
-    } catch (const std::invalid_argument &) {
-        rejectedMissingOutput = true;
-    }
-    assert(rejectedMissingOutput);
-
-    graph.nodes.at("source")->set_output("result", upstream);
     graph.nodes.at("consumer")->formulas.insert("dynamic:");
     bool rejectedFormula = false;
     try {
@@ -76,5 +69,16 @@ int main() {
         rejectedFormula = true;
     }
     assert(rejectedFormula);
+    graph.nodes.at("consumer")->formulas.clear();
+
+    // A graph edit after plan creation invalidates the dependency snapshot.
+    graph.nodes.at("consumer")->inputBounds["linked"] = {"not-in-plan", "result"};
+    bool rejectedStalePlan = false;
+    try {
+        (void)zeno::prepareAetherExecutionInputs(graph, plan);
+    } catch (const std::invalid_argument &) {
+        rejectedStalePlan = true;
+    }
+    assert(rejectedStalePlan);
     return 0;
 }
