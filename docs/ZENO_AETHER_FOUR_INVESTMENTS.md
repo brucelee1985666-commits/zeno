@@ -11,11 +11,7 @@ Reuse the existing Zeno graph, ZPC/CUDA, OpenVDB, and OptiX code. Add optional d
 
 Existing assets: C++17 core, ZPC, CUDA extension, OpenMP support, and TBB already appears as a dependency in the VDB extension.
 
-Adopt: oneTBB task arenas/task groups for CPU scheduling; retain ZPC/CUDA for GPU work. Use CUDA events and explicit stream ownership before attempting kernel fusion. Add a graph execution profiler and measure CPU↔GPU transfer bytes, queue wait, node time, and peak VRAM.
-
-Do not do yet: replace the graph executor or introduce a second GPU abstraction. First map node evaluation, data ownership, synchronization, and cache invalidation. A TBB link alone is not a scheduler implementation.
-
-Build switch: -DZENO_AETHER_ENABLE_TBB_RUNTIME=ON.
+Decision after scope reduction: do not add a separate oneTBB runtime hook yet. The existing Zeno/OpenMP/TBB usage must be profiled first; a new link-only switch would not implement a scheduler. Keep the graph profiler and ZPC/CUDA diagnostics as the measurement foundation. Any future CPU scheduler must demonstrate a real integration point and beat the existing path on representative graphs.
 
 ## 2. ZenoVolume — second priority
 
@@ -25,7 +21,7 @@ Adopt: NanoVDB as a read-mostly GPU representation of OpenVDB grids. Keep OpenVD
 
 Next implementation: add a conversion/upload node, device buffer lifetime management, grid metadata validation, and sparse-volume benchmarks. Test CUDA first; keep the data format API-agnostic for later Vulkan/HLSL readers.
 
-Build switch: -DZENO_AETHER_ENABLE_NANOVDB=ON and provide a compatible NanoVDB installation/include path. The build does not fetch dependencies.
+Build switch retained: -DZENO_AETHER_ENABLE_NANOVDB=ON and provide a compatible NanoVDB installation/include path. This is still only an optional header integration hook, not a completed conversion/upload node.
 
 NeuralVDB is a later optional research track, not a prerequisite for this first GPU-volume milestone.
 
@@ -35,7 +31,7 @@ Existing asset: zenovis/xinxinoptix and the existing ZENO_ENABLE_OPTIX switch. R
 
 Adopt: OptiX for NVIDIA ray tracing; evaluate Vulkan as a separate cross-vendor compute/graphics backend only after the viewport's resource, shader, and synchronization abstractions are understood. ReSTIR is a later rendering algorithm, not a library that can simply be linked to produce GI.
 
-Build switches: existing -DZENO_ENABLE_OPTIX=ON; optional Vulkan link foundation: -DZENO_AETHER_ENABLE_VULKAN=ON.
+Build switch: existing -DZENO_ENABLE_OPTIX=ON. Vulkan is deferred until a real viewport backend, resource model, shaders, and synchronization implementation are ready; a link-only CMake option was removed.
 
 Do not claim Vulkan ray tracing or ReSTIR is implemented by this dependency wiring. Those require renderer code, shaders, denoising, validation scenes, and GPU-specific tests.
 
@@ -142,3 +138,8 @@ Zeno integration in this branch:
 - The existing dependency-resolution RAII scope is now declared and implemented in the profiler header/source, with cumulative edge counts and inclusive resolution time.
 
 Only successful CUDA Driver API copy calls are counted; failed copy calls are excluded. The transfer counters are diagnostic data only. They do not synchronize CUDA, attribute transfers to individual nodes, observe Unified Memory page migration, or measure physical PCIe traffic/latency. The exact pinned-revision integration is tracked in ZPC PR #3 and is still under review. Build and runtime tests remain pending.
+
+
+## Scope reduction — 2026-11-23
+
+The Taskflow callback executor and its smoke test were removed from the active branch because they did not execute Zeno `INode` objects and had no measured advantage. StarPU was never integrated and remains deferred. The link-only oneTBB runtime and Vulkan switches were removed because neither represented a functioning scheduler or renderer. The legacy executor, profiler, ZPC/CUDA path, OpenVDB, OptiX, and optional NanoVDB discovery hook remain. See `docs/aether-scope-pruning.md` for the exact cleanup boundary and validation status.
