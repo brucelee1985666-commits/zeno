@@ -18,6 +18,12 @@
 #include <zeno/utils/Error.h>
 #include <zeno/utils/log.h>
 #include <iostream>
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+#include <algorithm>
+#include <functional>
+#include <unordered_map>
+#include <unordered_set>
+#endif
 
 namespace zeno {
 
@@ -107,9 +113,67 @@ ZENO_API void Graph::applyNodes(std::set<std::string> const &ids) {
         ctx = nullptr;
     }};
 
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+    // Only top-level requested nodes are reordered. Dependencies still execute
+    // through the existing recursive applyNode() path, preserving graph semantics.
+    std::unordered_map<std::string, double> pathCostCache;
+    std::unordered_map<std::string, std::uint64_t> sampleCache;
+    std::unordered_set<std::string> visiting;
+    std::function<double(const std::string &)> estimateCriticalPath =
+        [&](const std::string &nodeId) -> double {
+            const auto cached = pathCostCache.find(nodeId);
+            if (cached != pathCostCache.end()) return cached->second;
+            if (visiting.find(nodeId) != visiting.end()) return 0.0;
+
+            const auto nodeIt = nodes.find(nodeId);
+            if (nodeIt == nodes.end()) return 0.0;
+            visiting.insert(nodeId);
+
+            const auto estimate = getAetherNodeCostEstimate(nodeId);
+            sampleCache[nodeId] = estimate.samples;
+            double longestDependencyPath = 0.0;
+            for (const auto &binding : nodeIt->second->inputBounds) {
+                const auto dependencyId = binding.second.first;
+                if (nodes.find(dependencyId) != nodes.end()) {
+                    longestDependencyPath = std::max(
+                        longestDependencyPath, estimateCriticalPath(dependencyId));
+                }
+            }
+
+            visiting.erase(nodeId);
+            const double pathCost =
+                estimate.meanApplyMilliseconds + longestDependencyPath;
+            pathCostCache[nodeId] = pathCost;
+            return pathCost;
+        };
+
+    std::vector<AetherScheduleEntry> scheduledRoots;
+    scheduledRoots.reserve(ids.size());
+    for (const auto &id : ids) {
+        AetherScheduleEntry entry;
+        entry.node = id;
+        entry.estimatedCriticalPathMilliseconds = estimateCriticalPath(id);
+        entry.historicalSamples = sampleCache[id];
+        entry.reason = entry.historicalSamples
+            ? "ordered by historical EWMA node cost plus longest known dependency path"
+            : "no execution history; preserved deterministic input order";
+        scheduledRoots.emplace_back(std::move(entry));
+    }
+
+    std::stable_sort(scheduledRoots.begin(), scheduledRoots.end(),
+        [](const AetherScheduleEntry &a, const AetherScheduleEntry &b) {
+            return a.estimatedCriticalPathMilliseconds >
+                   b.estimatedCriticalPathMilliseconds;
+        });
+    recordAetherScheduleOrder(scheduledRoots);
+    for (const auto &entry : scheduledRoots) {
+        applyNode(entry.node);
+    }
+#else
     for (auto const &id: ids) {
         applyNode(id);
     }
+#endif
 }
 
 ZENO_API void Graph::applyNodesToExec() {
