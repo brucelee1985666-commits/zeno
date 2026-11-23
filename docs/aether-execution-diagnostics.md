@@ -72,3 +72,10 @@ The findings identify the highest measured node/kernel and describe counter
 coverage. They do not claim a bottleneck when a measurement domain is absent
 or incomplete. The report is intended as a reliable diagnostic input for a
 future scheduler, not as a scheduler or an optimization by itself.
+
+
+## Editor viewer and comparisons
+
+In multiprocess editor builds, the runner sends each completed graph-substep report to the editor. Open **Tools → Aether Execution Diagnostics** to inspect the latest JSON and save it to disk. The viewer compares node-apply time, instrumented GPU-kernel time, and explicit transfer bytes against the previous captured report. The typed API `compareAetherExecutionReports(baseline, candidate)` additionally returns per-node and per-kernel deltas for callers that retain typed snapshots.
+
+The UI comparison is against the previous captured report. When a timeline contains multiple substeps, this may be the preceding substep rather than a different scene or a controlled benchmark run.
