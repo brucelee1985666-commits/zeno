@@ -34,6 +34,7 @@ jobs:
         run: >
           cmake -S . -B build-core -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS=-mavx2
           -DZENO_BUILD_EDITOR=OFF
           -DZENO_BUILD_DESIGNER=OFF
           -DZENO_BUILD_PLAYER=OFF
@@ -77,6 +78,7 @@ jobs:
         run: >
           cmake -S . -B build-aether -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS=-mavx2
           -DZENO_BUILD_EDITOR=OFF
           -DZENO_BUILD_DESIGNER=OFF
           -DZENO_BUILD_PLAYER=OFF
