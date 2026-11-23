@@ -36,6 +36,21 @@ std::unordered_map<std::string, Aggregate> &profileData() {
     return data;
 }
 
+struct HistoricalAggregate {
+    double meanApplyMilliseconds = 0.0;
+    std::uint64_t samples = 0;
+};
+
+std::unordered_map<std::string, HistoricalAggregate> &historicalProfileData() {
+    static std::unordered_map<std::string, HistoricalAggregate> data;
+    return data;
+}
+
+std::vector<AetherScheduleEntry> &scheduleOrderData() {
+    static std::vector<AetherScheduleEntry> data;
+    return data;
+}
+
 struct GpuAggregate {
     std::uint64_t calls = 0;
     double totalMilliseconds = 0.0;
@@ -58,6 +73,12 @@ std::atomic<std::uint64_t> &activeExecutionId() {
 }
 
 thread_local unsigned int executionScopeDepth = 0;
+
+std::string historicalNodeKey(const std::string &nodeName, const void *graphIdentity) {
+    std::ostringstream key;
+    key << reinterpret_cast<std::uintptr_t>(graphIdentity) << ':' << nodeName;
+    return key.str();
+}
 
 std::string jsonEscape(const std::string &value) {
     std::ostringstream out;
@@ -111,13 +132,24 @@ void resetGpuTransferExecutionProfile() {
 #endif
 }
 
-void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bool failed) {
+void recordNodeExecution(const std::string &node, double elapsedMilliseconds, bool failed, const void *graphIdentity) {
     std::lock_guard<std::mutex> lock(profileMutex());
     auto &entry = profileData()[node];
     ++entry.calls;
     if (failed) ++entry.failures;
     entry.totalMilliseconds += elapsedMilliseconds;
     entry.maximumMilliseconds = std::max(entry.maximumMilliseconds, elapsedMilliseconds);
+
+    // Keep one constant-space EWMA per observed (graph instance, node) pair.
+    // Current-run counters may be reset; history survives those resets.
+    if (!failed) {
+        auto &history = historicalProfileData()[historicalNodeKey(node, graphIdentity)];
+        constexpr double alpha = 0.20;
+        history.meanApplyMilliseconds = history.samples == 0
+            ? elapsedMilliseconds
+            : alpha * elapsedMilliseconds + (1.0 - alpha) * history.meanApplyMilliseconds;
+        ++history.samples;
+    }
 }
 
 void recordNodeDependencyResolution(const std::string &node, std::uint64_t edges,
@@ -152,6 +184,49 @@ std::vector<NodeExecutionProfile> getNodeExecutionProfile() {
             return a.totalMilliseconds > b.totalMilliseconds;
         });
     return result;
+}
+
+
+AetherNodeCostEstimate getAetherNodeCostEstimate(const std::string &nodeName, const void *graphIdentity) {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    AetherNodeCostEstimate estimate;
+    const auto it = historicalProfileData().find(historicalNodeKey(nodeName, graphIdentity));
+    if (it == historicalProfileData().end()) return estimate;
+    estimate.meanApplyMilliseconds = it->second.meanApplyMilliseconds;
+    estimate.samples = it->second.samples;
+    estimate.confidence = std::min(1.0,
+        static_cast<double>(estimate.samples) / 8.0);
+    return estimate;
+}
+
+void clearAetherNodeCostHistory(const void *graphIdentity) {
+    std::ostringstream prefix;
+    prefix << reinterpret_cast<std::uintptr_t>(graphIdentity) << ':';
+    const std::string keyPrefix = prefix.str();
+    std::lock_guard<std::mutex> lock(profileMutex());
+    auto &history = historicalProfileData();
+    for (auto it = history.begin(); it != history.end();) {
+        if (it->first.compare(0, keyPrefix.size(), keyPrefix) == 0)
+            it = history.erase(it);
+        else
+            ++it;
+    }
+}
+
+void recordAetherScheduleOrder(const std::vector<AetherScheduleEntry> &entries) {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    auto &schedule = scheduleOrderData();
+    schedule.insert(schedule.end(), entries.begin(), entries.end());
+}
+
+std::vector<AetherScheduleEntry> getAetherScheduleOrder() {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    return scheduleOrderData();
+}
+
+void resetAetherScheduleOrder() {
+    std::lock_guard<std::mutex> lock(profileMutex());
+    scheduleOrderData().clear();
 }
 
 void resetNodeExecutionProfile() {
@@ -206,13 +281,13 @@ NodeDependencyProfileScope::~NodeDependencyProfileScope() {
     recordNodeDependencyResolution(nodeName, dependencyEdges, elapsed);
 }
 
-NodeExecutionProfileScope::NodeExecutionProfileScope(std::string node)
-    : nodeName(std::move(node)), started(std::chrono::steady_clock::now()) {}
+NodeExecutionProfileScope::NodeExecutionProfileScope(std::string node, const void *identity)
+    : nodeName(std::move(node)), started(std::chrono::steady_clock::now()), graphIdentity(identity) {}
 
 NodeExecutionProfileScope::~NodeExecutionProfileScope() {
     const auto elapsed = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
-    recordNodeExecution(nodeName, elapsed, failed);
+    recordNodeExecution(nodeName, elapsed, failed, graphIdentity);
 }
 
 AetherExecutionProfileScope::AetherExecutionProfileScope() {
@@ -220,6 +295,7 @@ AetherExecutionProfileScope::AetherExecutionProfileScope() {
         resetNodeExecutionProfile();
         resetGpuKernelExecutionProfile();
         resetGpuTransferExecutionProfile();
+        resetAetherScheduleOrder();
         activeExecutionId().store(
             executionSequence().fetch_add(1, std::memory_order_relaxed) + 1,
             std::memory_order_relaxed);
@@ -233,8 +309,14 @@ AetherExecutionProfileScope::~AetherExecutionProfileScope() {
 AetherExecutionReport getAetherExecutionReport() {
     AetherExecutionReport report;
     report.executionId = activeExecutionId().load(std::memory_order_relaxed);
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+    report.schedulerMode = "history_critical_path_advisory";
+#else
+    report.schedulerMode = "legacy_input_order";
+#endif
     report.nodes = getNodeExecutionProfile();
     report.gpuKernels = getGpuKernelExecutionProfile();
+    report.schedule = getAetherScheduleOrder();
     report.gpuTransfers = getGpuTransferExecutionProfile();
 
     for (auto const &node : report.nodes) {
@@ -285,6 +367,16 @@ AetherExecutionReport getAetherExecutionReport() {
         report.findings.emplace_back(finding.str());
     }
 
+#ifdef ZENO_AETHER_ENABLE_SMART_SCHEDULER
+    report.findings.emplace_back(
+        "Smart scheduler computes a suggested order for requested graph roots using historical CPU apply EWMA and the longest known dependency path. Execution remains in legacy order because node purity and side-effect safety are not declared.");
+    report.findings.emplace_back(
+        "CPU/CUDA backend dispatch and transfer elimination remain disabled: node-level backend capability and data-residency contracts are not yet available.");
+#else
+    report.findings.emplace_back(
+        "Smart scheduler is disabled; graph roots retain the legacy input order.");
+#endif
+
     if (report.totalDependencyResolutionMilliseconds > 0.0) {
         report.findings.emplace_back(
             "Dependency resolution is reported separately; it can include upstream node execution and must not be added to node apply time as independent wall-clock cost.");
@@ -297,6 +389,7 @@ std::string getAetherExecutionReportJson() {
     std::ostringstream out;
     out << "{\n  \"schema\": \"zeno.aether.execution-report.v1\",\n";
     out << "  \"execution_id\": " << report.executionId << ",\n";
+    out << "  \"scheduler_mode\": \"" << jsonEscape(report.schedulerMode) << "\",\n";
     out << "  \"totals\": {\n";
     out << "    \"node_apply_ms\": "; jsonNumber(out, report.totalNodeApplyMilliseconds); out << ",\n";
     out << "    \"dependency_resolution_ms\": "; jsonNumber(out, report.totalDependencyResolutionMilliseconds); out << ",\n";
@@ -332,6 +425,18 @@ std::string getAetherExecutionReportJson() {
         out << "}";
     }
     if (!report.gpuKernels.empty()) out << "\n  ";
+    out << "],\n";
+
+    out << "  \"schedule\": [";
+    for (std::size_t i = 0; i < report.schedule.size(); ++i) {
+        const auto &entry = report.schedule[i];
+        out << (i ? ",\n" : "\n") << "    {\"node\": \"" << jsonEscape(entry.node)
+            << "\", \"estimated_critical_path_ms\": ";
+        jsonNumber(out, entry.estimatedCriticalPathMilliseconds);
+        out << ", \"historical_samples\": " << entry.historicalSamples
+            << ", \"reason\": \"" << jsonEscape(entry.reason) << "\"}";
+    }
+    if (!report.schedule.empty()) out << "\n  ";
     out << "],\n";
 
     const auto &t = report.gpuTransfers;

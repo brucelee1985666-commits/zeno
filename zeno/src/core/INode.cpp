@@ -154,7 +154,7 @@ ZENO_API void INode::preApply() {
         Timer _(myname);
 #endif
 #ifdef ZENO_AETHER_ENABLE_PROFILER
-        NodeExecutionProfileScope profile(myname);
+        NodeExecutionProfileScope profile(myname, graph);
         try {
             apply();
         } catch (...) {
