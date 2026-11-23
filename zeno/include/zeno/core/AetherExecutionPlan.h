@@ -19,9 +19,16 @@ struct AetherExecutionPlanNode {
     std::vector<std::string> blockers;
 };
 
+struct AetherResourceHazard {
+    std::string firstNode;
+    std::string secondNode;
+    std::string resource;
+};
+
 struct AetherExecutionPlan {
     std::vector<AetherExecutionPlanNode> nodes; // dependency-first order
     std::vector<std::pair<std::size_t, std::size_t>> dependencyEdges;
+    std::vector<AetherResourceHazard> unorderedResourceHazards;
     bool hasMissingNodes = false;
     bool hasDependencyCycle = false;
     bool allNodesCpuParallelSafe = false;
