@@ -42,6 +42,10 @@ if (ZENO_AETHER_ENABLE_TASKFLOW)
         HINTS ENV TASKFLOW_ROOT ${TASKFLOW_ROOT}
         PATH_SUFFIXES include
     )
+    if (NOT ZENO_AETHER_TASKFLOW_INCLUDE_DIR AND TASKFLOW_ROOT AND
+        EXISTS "${TASKFLOW_ROOT}/taskflow/taskflow.hpp")
+        set(ZENO_AETHER_TASKFLOW_INCLUDE_DIR "${TASKFLOW_ROOT}")
+    endif()
     if (NOT ZENO_AETHER_TASKFLOW_INCLUDE_DIR)
         message(FATAL_ERROR
             "ZENO_AETHER_ENABLE_TASKFLOW=ON, but taskflow/taskflow.hpp was not found. "
@@ -53,7 +57,7 @@ if (ZENO_AETHER_ENABLE_TASKFLOW)
     set(CMAKE_REQUIRED_LIBRARIES Threads::Threads)
     check_cxx_source_compiles("
         #include <taskflow/taskflow.hpp>
-        #if TF_VERSION < 301100 || TF_VERSION >= 400000
+        #if TF_VERSION < 301100 || TF_VERSION >= 301200
         #error Unsupported Taskflow version: Aether currently targets 3.11.x (C++17)
         #endif
         int main() { tf::Executor executor; tf::Taskflow taskflow; executor.run(taskflow).get(); }
