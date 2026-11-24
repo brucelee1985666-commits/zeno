@@ -107,9 +107,24 @@ Limitações conhecidas do ZNVDS v1:
 - valores inativos de voxels não são exportados como targets de regressão;
 - o parser valida estrutura e contagens, mas ainda não compara uma reconstrução contra o grid original.
 
+### Gate 2A — treinador neural experimental (implementado; GPU ainda não executada)
+
+Foi adicionado `tools/neural_volume/train_znvds.py`, usando a extensão Python do tiny-cuda-nn:
+- um HashGrid + CutlassMLP para classificar ocupação por domínio;
+- outro HashGrid + CutlassMLP para regredir valores ativos;
+- tiles internos e lista de leaf blocks permanecem explícitos;
+- diferenças de classificação são guardadas como correções esparsas, para reconstrução exata da máscara quando o mesmo backend/configuração de inferência for usado;
+- valores cuja previsão excede a tolerância definida são guardados como correções exatas;
+- domínios pequenos que não justificam um regressor guardam os valores explicitamente;
+- métricas incluem accuracy, IoU, precision/recall, contagem de correções e RMSE pré-correção.
+
+A saída `.znvm` é um checkpoint experimental PyTorch/tiny-cuda-nn, não um formato final independente de backend. Ainda não existe decoder C++ do Zeno para esse checkpoint. A correção de topologia depende de inferência numericamente compatível com a usada durante a codificação; isso precisa ser validado antes de prometer topologia lossless entre plataformas.
+
+Dependências do treinamento: Python, NumPy, PyTorch com CUDA e tiny-cuda-nn instalado conforme as instruções upstream. A extensão tiny-cuda-nn exige GPU NVIDIA e não oferece fallback CPU. O treinamento real não foi executado nesta etapa porque não há uma GPU de execução disponível nesta sessão.
+
 ## Auditoria inicial dos backends neurais
 
-- tiny-cuda-nn é um candidato concreto para MLPs, codificação hash, treinamento e inferência CUDA; ele não fornece a hierarquia VDB nem a garantia de topologia lossless. O README upstream atual pede CMake 3.21+, enquanto este fork declara CMake 3.15 no projeto raiz. Portanto, não adicionar o upstream atual diretamente como submódulo antes de decidir entre uma versão compatível ou uma atualização deliberada do baseline CMake.
+- tiny-cuda-nn é usado agora como backend experimental do treinador Python para HashGrid + CutlassMLP; ele não fornece a hierarquia VDB nem a garantia de topologia lossless. O upstream atual pede CMake 3.18+ para seu build C++ e a extensão Python depende de PyTorch com CUDA. Por isso, não foi adicionado como submódulo nem como dependência obrigatória do runtime Zeno.
 - ƒVDB é uma infraestrutura esparsa de GPU integrada ao ecossistema PyTorch. É candidato para prototipagem/treinamento offline, mas não deve entrar no runtime C++ do Zeno como dependência pesada nesta fase.
 - ZPC já está presente no fork e fornece infraestrutura CUDA/memória. Reutilizar seus recursos onde couber, sem criar um segundo alocador ou runtime paralelo.
 - A decisão de backend deve ser tomada após fixar uma versão, conferir licença, CUDA/CMake mínimos e validar o caminho de exportação/importação de pesos. A arquitetura do arquivo neural permanece independente do backend.
