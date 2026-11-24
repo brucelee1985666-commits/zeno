@@ -86,9 +86,48 @@ int main() {
         nanovdb::io::writeGrid(nvdbPath.string(), handle);
         if(!std::filesystem::exists(nvdbPath) || std::filesystem::file_size(nvdbPath)==0)
             throw std::runtime_error("NanoVDB serialization produced no output file");
+
+        // Reopen the bytes from disk: validate the serialized artifact itself.
+        auto reopened = nanovdb::io::readGrid<nanovdb::HostBuffer>(nvdbPath.string());
+        const auto* diskGrid = reopened.grid<float>();
+        if(!diskGrid) throw std::runtime_error("serialized NanoVDB did not reopen as FloatGrid");
+        const auto requireActiveValue = [&](const nanovdb::Coord& coord, float expected,
+                                            const char* label) {
+            if(!diskGrid->tree().isActive(coord))
+                throw std::runtime_error(std::string("serialized NanoVDB lost active ") + label);
+            if(std::abs(diskGrid->tree().getValue(coord)-expected)>1e-6f)
+                throw std::runtime_error(std::string("serialized NanoVDB changed ") + label);
+        };
+        requireActiveValue(a, 0.25f, "first leaf voxel");
+        requireActiveValue(b, 0.75f, "second leaf voxel");
+        requireActiveValue(tileProbe, 2.5f, "level-1 tile");
+        requireActiveValue(nanovdb::Coord(1,129,1), 3.5f, "level-2 tile");
+        requireActiveValue(nanovdb::Coord(4097,1,1), 4.5f, "level-3 tile");
+        if(std::abs(diskGrid->tree().getValue(nanovdb::Coord(100000,100000,100000)))>1e-6f)
+            throw std::runtime_error("serialized NanoVDB changed grid background");
+        if(diskGrid->gridClass()!=nanovdb::GridClass::FogVolume)
+            throw std::runtime_error("serialized NanoVDB changed grid class");
+        if(std::string(diskGrid->gridName())!="znvds-roundtrip")
+            throw std::runtime_error("serialized NanoVDB changed grid name");
+        const auto diskWorld=diskGrid->map().applyMap(nanovdb::Vec3d(-8,16,24));
+        if(std::abs(diskWorld[0]+6.0)>1e-9 || std::abs(diskWorld[1]-40.0)>1e-9 ||
+           std::abs(diskWorld[2]-107.0)>1e-9)
+            throw std::runtime_error("serialized NanoVDB changed affine transform");
+
+        // Verify that NanoVDB's reader rejects a truncated serialized artifact.
+        const auto badNvdbPath=std::filesystem::temp_directory_path()/"znvds-to-nanovdb-truncated.nvdb";
+        std::filesystem::copy_file(nvdbPath,badNvdbPath,std::filesystem::copy_options::overwrite_existing);
+        const auto nvdbBytes=std::filesystem::file_size(badNvdbPath);
+        std::filesystem::resize_file(badNvdbPath,nvdbBytes-1);
+        bool rejectedNvdb=false;
+        try { (void)nanovdb::io::readGrid<nanovdb::HostBuffer>(badNvdbPath.string()); }
+        catch (const std::exception&) { rejectedNvdb=true; }
+        std::filesystem::remove(badNvdbPath);
+        if(!rejectedNvdb)
+            throw std::runtime_error("NanoVDB reader accepted a truncated serialized file");
         std::filesystem::remove(nvdbPath);
         std::filesystem::remove(path);
-        std::cout<<"ZNVDS -> NanoVDB CPU round-trip passed: values, occupancy, all tile levels, class, name, affine transform\n";
+        std::cout<<"ZNVDS -> NanoVDB disk round-trip passed: reopened values, occupancy, all tile levels, class, name, affine transform, truncated-file rejection\n";
         return 0;
     } catch (...) {
         std::error_code ec; std::filesystem::remove(path,ec); throw;
