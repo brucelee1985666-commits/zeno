@@ -67,6 +67,7 @@ TinyCudaNNRuntime::TinyCudaNNRuntime(const std::string& jsonConfig, const std::v
         checkCuda(cudaMalloc(&m_impl->params, n * sizeof(__half)), "allocate FP16 parameters");
         floatToHalf<<<static_cast<unsigned>((n + 255) / 256), 256, 0, m_impl->stream>>>(staging.get(), static_cast<__half*>(m_impl->params), n);
         checkCuda(cudaGetLastError(), "convert parameters to FP16");
+        checkCuda(cudaStreamSynchronize(m_impl->stream), "synchronize FP16 parameter conversion");
     } else {
         checkCuda(cudaMalloc(&m_impl->params, n * sizeof(float)), "allocate FP32 parameters");
         checkCuda(cudaMemcpyAsync(m_impl->params, weights.data(), n * sizeof(float), cudaMemcpyHostToDevice, m_impl->stream), "upload FP32 parameters");
