@@ -65,6 +65,19 @@ The repository also contains a CPU-only end-to-end converter:
 - This is a lossless CPU reference path for the ZNVDS interchange format; it is
   not a neural decoder and does not execute tiny-cuda-nn.
 
+Build the standalone converter against the pinned upstream NanoVDB headers:
+
+```bash
+g++ -std=c++17 -pthread -O2 \
+  -isystem projects/zenvdb/nanovdb-upstream/nanovdb \
+  tools/neural_volume/znvds_to_nanovdb.cpp \
+  tools/neural_volume/znvds_to_nanovdb_main.cpp \
+  -o znvds-to-nanovdb
+./znvds-to-nanovdb input.znvds output.nvdb
+```
+
+The CLI writes a standard NanoVDB file. It does not require CUDA or tiny-cuda-nn.
+
 The tiny-cuda-nn trainer remains optional and NVIDIA-only. If no compatible GPU
 is available, use the CPU audit and CPU NanoVDB tests; do not substitute a
 CPU mock and call it a neural training/inference result.
