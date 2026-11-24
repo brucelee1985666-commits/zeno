@@ -412,11 +412,22 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
     DecodedNeuralLeaf decoded;
     decoded.origin = origin;
     decoded.values.fill(ownedModel.background);
+
+    // Apply occupancy corrections before selecting regressor samples. A
+    // corrected false-negative voxel must receive a neural value prediction,
+    // not the background value. Exact-value corrections are applied last.
+    for (uint16_t i = 0; i < 512; ++i) {
+        decoded.occupancy[i] = logits[i] >= 0.0f ? 1u : 0u;
+    }
+    for (uint16_t offset : leafCorrections.occupancyOffsets) {
+        if (offset >= 512) throw std::out_of_range("leaf occupancy correction offset out of range");
+        decoded.occupancy[offset] = static_cast<uint8_t>(1u - decoded.occupancy[offset]);
+    }
+
     std::vector<std::array<float, 3>> activePoints;
     std::vector<uint16_t> activeOffsets;
     for (uint16_t i = 0; i < 512; ++i) {
-        decoded.occupancy[i] = logits[i] >= 0.0f ? 1u : 0u;
-        if (decoded.occupancy[i] && domain.hasRegressor) {
+        if (decoded.occupancy[i]) {
             activePoints.push_back(points[i]);
             activeOffsets.push_back(i);
         }
@@ -432,12 +443,14 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
         }
     }
 
-    applyLeafCorrections(leafCorrections, decoded.occupancy, decoded.values);
+    std::array<bool, 512> exactValuePresent{};
+    for (const auto& correction : leafCorrections.exactValueOffsets) {
+        if (correction.first >= 512) throw std::out_of_range("leaf exact-value correction offset out of range");
+        if (!std::isfinite(correction.second)) throw std::invalid_argument("leaf exact-value correction must be finite");
+        decoded.values[correction.first] = correction.second;
+        exactValuePresent[correction.first] = true;
+    }
     if (!sourceDomain.hasRegressor) {
-        std::array<bool, 512> exactValuePresent{};
-        for (const auto& correction : leafCorrections.exactValueOffsets) {
-            exactValuePresent[correction.first] = true;
-        }
         for (uint16_t i = 0; i < 512; ++i) {
             if (decoded.occupancy[i] && !exactValuePresent[i]) {
                 throw std::runtime_error("leaf without a regressor is missing an exact active voxel value");
