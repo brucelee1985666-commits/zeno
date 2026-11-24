@@ -82,6 +82,8 @@ if (ZENO_WITH_TINY_CUDA_NN)
         target_compile_definitions(zeno_neuralvolume_cuda PRIVATE
             ZENO_WITH_TINY_CUDA_NN=1
             ZENO_WITH_NANOVDB_CUDA_BUILDERS=1)
+        target_compile_options(zeno_neuralvolume_cuda PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>)
         set_target_properties(zeno_neuralvolume_cuda PROPERTIES
             CUDA_STANDARD 17
             CUDA_STANDARD_REQUIRED ON
