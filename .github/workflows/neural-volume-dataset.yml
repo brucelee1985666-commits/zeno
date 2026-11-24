@@ -26,3 +26,21 @@ jobs:
         run: python -m py_compile tools/neural_volume/inspect_znvds.py tools/neural_volume/inspect_znvm.py tools/neural_volume/train_znvds.py
       - name: Validate ZNVDS parser
         run: python -m unittest discover -s tools/neural_volume -p "test_*.py" -v
+
+  nanovdb-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Fetch pinned OpenVDB submodule
+        run: git submodule update --init projects/zenvdb/openvdb
+      - name: Install OpenVDB header dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtbb-dev libblosc-dev zlib1g-dev libboost-iostreams-dev libimath-dev
+      - name: Compile NanoVDB conversion API smoke
+        run: |
+          g++ -std=c++17 -fsyntax-only \
+            -Iprojects/zenvdb/openvdb/openvdb \
+            -Iprojects/zenvdb/openvdb/nanovdb \
+            tools/neural_volume/nanovdb_api_smoke.cpp
