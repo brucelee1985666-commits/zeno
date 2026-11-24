@@ -20,7 +20,6 @@ endif()
 
 option(ZENO_SYSTEM_OPENVDB "Use OpenVDB found in system instead of submodule" OFF)
 
-target_sources(zeno PRIVATE ${PROJECT_SOURCE})
 target_include_directories(zeno PRIVATE ../oldzenbase/include)
 
 # Never mix NanoVDB headers from the vendored OpenVDB revision with a different
@@ -42,6 +41,9 @@ else()
     list(FILTER PROJECT_SOURCE EXCLUDE REGEX "(OpenVDBToNanoVDB|ExportNeuralVolumeDataset)\\.cpp$")
     message(STATUS "Matching NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
 endif()
+
+# Add sources only after the optional NanoVDB files have been filtered.
+target_sources(zeno PRIVATE ${PROJECT_SOURCE})
 
 target_include_directories(zeno PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
