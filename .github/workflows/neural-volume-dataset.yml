@@ -139,6 +139,15 @@ jobs:
             tools/neural_volume/znvds_to_nanovdb.cpp \
             tools/neural_volume/znvds_to_nanovdb_main.cpp \
             -o znvds-to-nanovdb
+
+      - name: Build and run real OpenVDB FloatGrid to ZNVDS to NanoVDB disk round-trip
+        run: |
+          cmake -S tools/neural_volume/openvdb_roundtrip -B build-openvdb-floatgrid \
+            -DOPENVDB_SOURCE_DIR="$GITHUB_WORKSPACE/projects/zenvdb/openvdb" \
+            -DNANOVDB_INCLUDE_DIR="$GITHUB_WORKSPACE/projects/zenvdb/nanovdb-upstream/nanovdb"
+          cmake --build build-openvdb-floatgrid --target openvdb-floatgrid-roundtrip-smoke -j2
+          ./build-openvdb-floatgrid/openvdb-floatgrid-roundtrip-smoke
+
       - name: Compile Zeno ZNVDS conversion node against real Zeno headers
         run: |
           g++ -std=c++17 -Wno-deprecated-declarations -fsyntax-only \
