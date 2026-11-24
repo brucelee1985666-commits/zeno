@@ -85,6 +85,28 @@ Implementar consulta por bloco sem materializar o volume inteiro. Avaliar tiny-c
 
 Adicionar warm-start sequencial de pesos, política de novos blocos e detecção de mudanças de topologia. Nunca reutilizar pesos sem validar bounds, transform e identidade do bloco.
 
+### Gate 1A — dataset de treino ZNVDS v1 (implementado; ainda sem validação C++)
+
+Foi adicionado o nó `ExportNeuralVolumeDataset` em `projects/zenvdb/ExportNeuralVolumeDataset.cpp`. Ele aceita FloatGrid e escreve um dataset de treino binário `.znvds` sem materializar o volume inteiro em memória.
+
+O ZNVDS v1 contém:
+- magic, versão e flags explícitas;
+- nome do grid, background e voxel size;
+- matriz affine index-to-world 4×4 em double, com rejeição de transforms não lineares;
+- tiles ativos internos preservados como registros explícitos;
+- uma máscara de ocupação exata de 512 bits por leaf 8³;
+- valores float32 dos voxels ativos, indexados por offset local de 16 bits.
+
+A separação é intencional: a máscara é o alvo do classificador de ocupação; os valores ativos são o alvo do regressor. Os tiles superiores permanecem explícitos nesta primeira versão. O dataset é um intercâmbio de treinamento, não é ainda um arquivo NeuralVDB comprimido e não armazena pesos treinados.
+
+Também foram adicionados `tools/neural_volume/inspect_znvds.py` e testes unitários em `test_inspect_znvds.py`, além de um workflow Python restrito à branch de trabalho para validar o parser. O smoke check local do layout sintético passou; isso não valida a compilação nem a saída real do nó C++.
+
+Limitações conhecidas do ZNVDS v1:
+- FloatGrid somente;
+- somente transforms lineares/affine;
+- valores inativos de voxels não são exportados como targets de regressão;
+- o parser valida estrutura e contagens, mas ainda não compara uma reconstrução contra o grid original.
+
 ## Auditoria inicial dos backends neurais
 
 - tiny-cuda-nn é um candidato concreto para MLPs, codificação hash, treinamento e inferência CUDA; ele não fornece a hierarquia VDB nem a garantia de topologia lossless. O README upstream atual pede CMake 3.21+, enquanto este fork declara CMake 3.15 no projeto raiz. Portanto, não adicionar o upstream atual diretamente como submódulo antes de decidir entre uma versão compatível ou uma atualização deliberada do baseline CMake.
