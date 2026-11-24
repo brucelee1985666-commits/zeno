@@ -66,7 +66,9 @@ if (ZENO_WITH_TINY_CUDA_NN)
     # but compile a clear runtime-unavailable fallback for the NanoVDB bridge.
     if (ZENO_NANOVDB_INCLUDE_DIR
         AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/PointsToGrid.cuh"
-        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/IndexToGrid.cuh")
+        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/IndexToGrid.cuh"
+        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/cuda/GridHandle.cuh"
+        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/GridChecksum.cuh")
         target_compile_definitions(zeno PRIVATE ZENO_WITH_NANOVDB_CUDA_BUILDERS=1)
         message(STATUS "NanoVDB CUDA PointsToGrid + IndexToGrid bridge enabled")
     else()
