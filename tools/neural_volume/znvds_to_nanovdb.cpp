@@ -136,8 +136,8 @@ convertZnvdsToNanoVdb(const std::filesystem::path& path) {
         m[r][c] = in.f64("affine transform");
         if (!std::isfinite(m[r][c])) throw std::runtime_error("non-finite ZNVDS affine transform");
     }
-    if (std::abs(m[3][0]) > 1e-12 || std::abs(m[3][1]) > 1e-12 ||
-        std::abs(m[3][2]) > 1e-12 || std::abs(m[3][3]-1.0) > 1e-12)
+    if (std::abs(m[0][3]) > 1e-12 || std::abs(m[1][3]) > 1e-12 ||
+        std::abs(m[2][3]) > 1e-12 || std::abs(m[3][3]-1.0) > 1e-12)
         throw std::runtime_error("ZNVDS transform is not affine");
 
     Mat3 linear, invLinear;
@@ -147,7 +147,7 @@ convertZnvdsToNanoVdb(const std::filesystem::path& path) {
     nanovdb::tools::build::FloatGrid source(
         background, name, static_cast<nanovdb::GridClass>(gridClass));
     source.mMap.set(linear, invLinear,
-                    nanovdb::Vec3d(m[0][3], m[1][3], m[2][3]));
+                    nanovdb::Vec3d(m[3][0], m[3][1], m[3][2]));
 
     std::set<std::tuple<int32_t,int32_t,int32_t,uint32_t>> seenTiles;
     for (uint64_t n=0; n<tileCount; ++n) {
