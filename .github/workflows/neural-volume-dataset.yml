@@ -75,8 +75,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Fetch pinned upstream NanoVDB headers
-        run: git submodule update --init projects/zenvdb/nanovdb-upstream
+      - name: Fetch pinned OpenVDB CMake modules and upstream NanoVDB headers
+        run: git submodule update --init projects/zenvdb/openvdb projects/zenvdb/nanovdb-upstream
       - name: Install Zeno headless runtime dependencies
         run: |
           sudo apt-get update
@@ -96,7 +96,8 @@ jobs:
             -DZENO_BUILD_NEURAL_VOLUME_NODE_TESTS=ON \
             -DZENO_WITH_CUDA=OFF \
             -DZENO_USE_CCACHE=OFF \
-            -DZENO_ENABLE_OPENMP=OFF
+            -DZENO_ENABLE_OPENMP=OFF \
+            -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/projects/zenvdb/openvdb/cmake"
       - name: Build Zeno and node integration executables
         run: |
           cmake --build build-zeno-node-runtime \
