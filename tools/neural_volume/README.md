@@ -6,10 +6,15 @@ This folder contains the first offline neural-compression experiment for Zeno.
 
 1. In Zeno, connect a FloatGrid to the `ExportNeuralVolumeDataset` node and write a `.znvds` file.
 2. Install a PyTorch build matching the local CUDA toolkit/driver.
-3. Install the pinned tiny-cuda-nn Python extension:
+3. Fetch the pinned tiny-cuda-nn source **with its required submodules** and install its PyTorch extension. A direct `pip install git+...` is insufficient because the upstream build uses CUTLASS and fmt submodules:
    
    ```bash
-   pip install "git+https://github.com/NVlabs/tiny-cuda-nn.git@3daa6e5b8b8e0fa17971a1a20acfbb3754494b38#subdirectory=bindings/torch"
+   git clone https://github.com/NVlabs/tiny-cuda-nn.git
+   cd tiny-cuda-nn
+   git checkout 3daa6e5b8b8e0fa17971a1a20acfbb3754494b38
+   git submodule update --init --recursive
+   pip install ./bindings/torch
+   cd ..
    ```
 
 4. Install NumPy if it was not installed with PyTorch:
