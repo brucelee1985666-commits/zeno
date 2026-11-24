@@ -55,7 +55,8 @@ jobs:
             -DOPENVDB_BUILD_NANOVDB=OFF \
             -DUSE_NANOVDB=OFF \
             -DUSE_EXR=OFF \
-            -DUSE_IMATH_HALF=OFF
+            -DUSE_IMATH_HALF=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - name: Compile NanoVDB conversion API smoke
         run: |
           g++ -std=c++17 -fsyntax-only \
