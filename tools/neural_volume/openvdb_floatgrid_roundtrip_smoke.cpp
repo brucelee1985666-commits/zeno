@@ -40,11 +40,29 @@ openvdb::FloatGrid::Ptr makeRealFloatGrid() {
 int main() {
     openvdb::initialize();
     const auto base = std::filesystem::temp_directory_path();
+    const auto vdbPath = base / "openvdb-floatgrid-source.vdb";
     const auto znvdsPath = base / "openvdb-floatgrid-real-chain.znvds";
     const auto nvdbPath = base / "openvdb-floatgrid-real-chain.nvdb";
     try {
-        // This is a genuine OpenVDB FloatGrid tree, not a hand-authored ZNVDS fixture.
-        auto source = makeRealFloatGrid();
+        // Create and persist a genuine OpenVDB FloatGrid, then reopen it from disk.
+        // The exporter is deliberately fed the reloaded grid, not the in-memory source.
+        auto authored = makeRealFloatGrid();
+        openvdb::io::File sourceFile(vdbPath.string());
+        openvdb::GridPtrVec sourceGrids;
+        sourceGrids.push_back(authored);
+        sourceFile.write(sourceGrids);
+        sourceFile.close();
+
+        sourceFile.open();
+        require(sourceFile.hasGrid(authored->getName()),
+                "written .vdb file does not contain the expected FloatGrid");
+        auto baseGrid = sourceFile.readGrid(authored->getName());
+        sourceFile.close();
+        auto source = openvdb::gridPtrCast<openvdb::FloatGrid>(baseGrid);
+        require(source != nullptr, "reopened .vdb grid is not an OpenVDB FloatGrid");
+        require(source->tree().activeVoxelCount() == authored->tree().activeVoxelCount(),
+                "active topology changed while writing and reopening the source .vdb");
+
         zeno::neural_volume::writeZnvdsFromOpenVdbFloatGrid(*source, znvdsPath);
         require(std::filesystem::exists(znvdsPath) &&
                 std::filesystem::file_size(znvdsPath) > 64,
@@ -85,15 +103,17 @@ int main() {
                 std::abs(world[2]-sourceWorld.z()) < 1e-9,
                 "affine index-to-world transform changed across conversion");
 
+        std::filesystem::remove(vdbPath);
         std::filesystem::remove(znvdsPath);
         std::filesystem::remove(nvdbPath);
-        std::cout << "REAL OpenVDB FloatGrid -> ZNVDS -> NanoVDB disk round-trip passed; "
+        std::cout << "REAL OpenVDB .vdb disk read -> FloatGrid -> ZNVDS -> NanoVDB disk round-trip passed; "
                   << checkedLeafVoxels << " active voxels, " << checkedTiles
                   << " active tiles, metadata and affine transform verified\n";
         openvdb::uninitialize();
         return 0;
     } catch (...) {
         std::error_code ec;
+        std::filesystem::remove(vdbPath, ec);
         std::filesystem::remove(znvdsPath, ec);
         std::filesystem::remove(nvdbPath, ec);
         openvdb::uninitialize();
