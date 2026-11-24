@@ -26,7 +26,8 @@ target_include_directories(zeno PRIVATE ../oldzenbase/include)
 # Never mix NanoVDB headers from the vendored OpenVDB revision with a different
 # system OpenVDB ABI. Resolve both from the same installation/source tree.
 if (ZENO_SYSTEM_OPENVDB)
-    find_path(ZENO_NANOVDB_INCLUDE_DIR nanovdb/NanoVDB.h)
+    find_path(ZENO_SYSTEM_NANOVDB_INCLUDE_DIR nanovdb/NanoVDB.h)
+    set(ZENO_NANOVDB_INCLUDE_DIR ${ZENO_SYSTEM_NANOVDB_INCLUDE_DIR})
 else()
     set(ZENO_NANOVDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/openvdb/nanovdb)
     if (NOT EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/NanoVDB.h")
