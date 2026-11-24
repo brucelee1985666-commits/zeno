@@ -61,6 +61,13 @@ void applyLeafCorrections(const LeafCorrections& corrections,
                           std::array<uint8_t, 512>& occupancy,
                           std::array<float, 512>& values);
 
+// CPU-testable post-processing shared by the host decoder: threshold logits,
+// apply exact occupancy flips, then return the final active sample offsets.
+std::vector<uint16_t> correctedActiveOffsets(
+    const LeafCorrections& corrections,
+    const std::array<float, 512>& classifierLogits,
+    std::array<uint8_t, 512>& occupancy);
+
 NeuralVolumeModel readZNVM(std::istream& input);
 NeuralVolumeModel readZNVMFile(const std::string& path);
 
