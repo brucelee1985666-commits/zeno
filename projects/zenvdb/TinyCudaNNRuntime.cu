@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
 #include <cub/cub.cuh>
