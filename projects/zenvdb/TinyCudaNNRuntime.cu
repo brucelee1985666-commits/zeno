@@ -247,8 +247,7 @@ struct DecodedNeuralLeafDevice::Impl {
         if (occupancyOffsets) cudaFree(occupancyOffsets);
         if (exactOffsets) cudaFree(exactOffsets);
         if (exactValues) cudaFree(exactValues);
-        if (stream) cudaStreamDestroy(stream);
-    }
+        if (stream) cudaStreamDestroy(stream);    }
 };
 DecodedNeuralLeafDevice::DecodedNeuralLeafDevice() = default;
 DecodedNeuralLeafDevice::~DecodedNeuralLeafDevice() = default;
@@ -497,8 +496,7 @@ DecodedNeuralLeafDevice NeuralVolumeDecoder::decodeLeafDevice(const std::array<i
     exactValueHost.reserve(corrections.exactValueOffsets.size());
     for (const auto& correction : corrections.exactValueOffsets) {
         exactOffsetHost.push_back(correction.first);
-        exactValueHost.push_back(correction.second);
-    }
+        exactValueHost.push_back(correction.second);    }
     if (!exactOffsetHost.empty()) {
         checkCuda(cudaMemcpy(result.m_impl->exactOffsets, exactOffsetHost.data(), exactOffsetHost.size() * sizeof(uint16_t), cudaMemcpyHostToDevice), "upload exact-value offsets");
         checkCuda(cudaMemcpy(result.m_impl->exactValues, exactValueHost.data(), exactValueHost.size() * sizeof(float), cudaMemcpyHostToDevice), "upload exact-value corrections");
@@ -725,13 +723,6 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
 
     // Construct only the sparse topology on the CPU. Each neural leaf contributes
     // its 512-byte occupancy mask; decoded float values remain on the GPU.
-    const std::string gridName = model.gridName.empty() ? "ZenoNeuralVolume" : model.gridName;
-    nanovdb::tools::build::Grid<nanovdb::ValueOnIndex> indexBuilder(1u, gridName);
-    indexBuilder.mMap = makeNanoMap(model);
-    if (model.gridClass < static_cast<uint32_t>(nanovdb::GridClass::End)) {
-        indexBuilder.mGridClass = static_cast<nanovdb::GridClass>(model.gridClass);
-    }
-
     using IndexBuildGrid = nanovdb::tools::build::Grid<nanovdb::ValueOnIndex>;
     constexpr int32_t leafDim = static_cast<int32_t>(IndexBuildGrid::Node0::DIM);
     constexpr int32_t lowerDim = static_cast<int32_t>(IndexBuildGrid::Node1::DIM);
@@ -747,8 +738,7 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
             alignDown(coord.x(), dim), alignDown(coord.y(), dim), alignDown(coord.z(), dim)};
     };
     const auto tileContains = [&](const nanovdb::Coord& coord, const ActiveTile& tile) {
-        const int32_t extent = tile.level == 1 ? leafDim : tile.level == 2 ? lowerDim : upperDim;
-        const int64_t x = coord.x(), y = coord.y(), z = coord.z();
+        const int32_t extent = tile.level == 1 ? leafDim : tile.level == 2 ? lowerDim : upperDim;        const int64_t x = coord.x(), y = coord.y(), z = coord.z();
         return x >= tile.coord[0] && x < int64_t(tile.coord[0]) + extent &&
                y >= tile.coord[1] && y < int64_t(tile.coord[1]) + extent &&
                z >= tile.coord[2] && z < int64_t(tile.coord[2]) + extent;
