@@ -152,14 +152,18 @@ def make_model(seed: int, output_dims: int = 1):
     }
 
 
-def train_model(model, inputs, targets, steps, batch_size, learning_rate, kind):
+def train_model(model, inputs, targets, steps, batch_size, learning_rate, kind, seed):
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # Use a domain-local CUDA generator so minibatch sampling is reproducible
+    # and does not depend on how many random draws previous domains consumed.
+    generator = torch.Generator(device=inputs.device)
+    generator.manual_seed(int(seed) & 0x7FFFFFFFFFFFFFFF)
     count = inputs.shape[0]
     if count == 0:
         raise ValueError("cannot train a model without samples")
     batch = min(batch_size, count)
     for _ in range(steps):
-        indices = torch.randint(count, (batch,), device="cuda")
+        indices = torch.randint(count, (batch,), device=inputs.device, generator=generator)
         prediction = model(inputs[indices]).float()
         if kind == "classifier":
             loss = F.binary_cross_entropy_with_logits(prediction, targets[indices])
@@ -213,7 +217,7 @@ def encode_domain(key, leaves, args):
     ) & 0x7fffffff
     domain_seed = (args.seed + domain_hash) & 0x7fffffff
     classifier, classifier_config = make_model(domain_seed)
-    train_model(classifier, x_occ, y_occ, args.steps, args.batch_size, args.learning_rate, "classifier")
+    train_model(classifier, x_occ, y_occ, args.steps, args.batch_size, args.learning_rate, "classifier", domain_seed)
     logits = infer(classifier, x_occ)
     predicted = (logits[:, 0] >= 0.0).to(torch.uint8).cpu().numpy()
     target = np.asarray(occupancy, dtype=np.uint8)
@@ -242,7 +246,7 @@ def encode_domain(key, leaves, args):
         y_val_np = ((np.asarray(values, dtype=np.float32) - center) / scale).reshape(-1, 1)
         y_val = torch.as_tensor(y_val_np, device="cuda")
         regressor, regressor_config = make_model(domain_seed + 100003)
-        train_model(regressor, x_val, y_val, args.steps, args.batch_size, args.learning_rate, "regressor")
+        train_model(regressor, x_val, y_val, args.steps, args.batch_size, args.learning_rate, "regressor", domain_seed + 100003)
         pred_norm = infer(regressor, x_val)[:, 0].cpu().numpy()
         pred_values = pred_norm * scale + center
         errors = np.abs(pred_values - np.asarray(values, dtype=np.float32))
