@@ -72,6 +72,21 @@ throughput, or VRAM usage. Actual GPU inference and round-trip tests remain
 unverified until run on NVIDIA hardware.
 
 
+
+## CPU-only validation boundary
+
+NanoVDB's core grid representation and CPU `GridBuilder` are independent of
+CUDA. The project CI therefore constructs a real host-side FloatGrid, converts
+it with upstream `createNanoGrid`, and verifies active leaf values and an
+active tile. A separate standard-library Python audit checks ZNVDS domain
+partitioning, negative coordinates, finite scalar samples, boundary planes,
+and a digest of active coordinate/value records.
+
+These are meaningful CPU reference checks for the sparse data path. They do
+not run tiny-cuda-nn, validate neural weights, or establish CUDA inference
+correctness. The pinned tiny-cuda-nn backend still requires NVIDIA hardware;
+the CUDA CI job is compile-only.
+
 ## Device-resident decoded leaves
 
 The optional CUDA API also exposes `NeuralVolumeDecoder::decodeLeafDevice()`. It returns a move-only `DecodedNeuralLeafDevice` owner whose opaque device pointers address 512 occupancy bytes and 512 float32 values. The owner keeps both allocations and the producing stream alive. Consumers must retain the owner while using either pointer. `streamHandle()` exposes the opaque CUDA stream so downstream kernels can be enqueued in order without a host round trip; call `wait()` when the CPU needs completion and validation. `wait()` checks a compact device validation flag (one integer), not the 512-voxel arrays.
