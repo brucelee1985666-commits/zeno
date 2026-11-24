@@ -603,9 +603,11 @@ struct NanoVDBDeviceGrid::Impl {
     cudaStream_t stream = nullptr;
     uint64_t activeVoxels = 0;
     uint64_t sourceTiles = 0;
+    ActiveTile* sourceTilesDevice = nullptr;
     ~Impl() {
         if (stream) cudaStreamSynchronize(stream);
         handle.reset();
+        if (sourceTilesDevice) cudaFree(sourceTilesDevice);
         if (stream) cudaStreamDestroy(stream);
     }
 };
@@ -613,6 +615,7 @@ struct NanoVDBDeviceGrid::Impl {
 struct NanoVDBDeviceGrid::Impl {
     uint64_t activeVoxels = 0;
     uint64_t sourceTiles = 0;
+    ActiveTile* sourceTilesDevice = nullptr;
 };
 #endif
 
@@ -644,6 +647,10 @@ uint64_t NanoVDBDeviceGrid::sourceActiveTileCount() const {
     if (!m_impl) throw std::logic_error("NanoVDB device grid is not initialized");
     return m_impl->sourceTiles;
 }
+const void* NanoVDBDeviceGrid::sourceActiveTilesDevice() const {
+    if (!m_impl) throw std::logic_error("NanoVDB device grid is not initialized");
+    return m_impl->sourceTilesDevice;
+}
 void NanoVDBDeviceGrid::wait() const {
 #if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
     if (!m_impl || !m_impl->handle) throw std::logic_error("NanoVDB device grid is not initialized");
@@ -674,6 +681,14 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
     output.m_impl->sourceTiles = model.activeTiles.size();
     checkCuda(cudaStreamCreateWithFlags(&output.m_impl->stream, cudaStreamNonBlocking), "create NanoVDB build stream");
     const cudaStream_t stream = output.m_impl->stream;
+    if (!model.activeTiles.empty()) {
+        static_assert(std::is_trivially_copyable<ActiveTile>::value, "active tile records must be trivially copyable");
+        checkCuda(cudaMalloc(reinterpret_cast<void**>(&output.m_impl->sourceTilesDevice),
+                             model.activeTiles.size() * sizeof(ActiveTile)), "allocate active tile sidecar");
+        checkCuda(cudaMemcpyAsync(output.m_impl->sourceTilesDevice, model.activeTiles.data(),
+                                  model.activeTiles.size() * sizeof(ActiveTile),
+                                  cudaMemcpyHostToDevice, stream), "upload active tile sidecar");
+    }
     const size_t capacity = static_cast<size_t>(model.sourceActiveVoxels);
     DeviceBuffer<nanovdb::Coord> dCoords(capacity);
     DeviceBuffer<float> dValues(capacity);
