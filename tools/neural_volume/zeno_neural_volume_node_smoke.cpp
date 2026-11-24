@@ -64,6 +64,11 @@ int main(int argc, char** argv) {
         exportGraph->setNodeInput(
             "read_external_vdb", "path",
             zeno::objectFromLiterial(inputPath.string()));
+        // ReadVDB's ImportVDBGrid implementation also requires the
+        // integer "index" socket (grid index inside the VDB file).
+        exportGraph->setNodeInput(
+            "read_external_vdb", "index",
+            zeno::objectFromLiterial(0));
         exportGraph->addNode("ExportNeuralVolumeDataset", "export_znvds");
         exportGraph->setNodeParam("export_znvds", "path", znvdsPath.string());
         exportGraph->bindNodeInput("export_znvds", "grid", "read_external_vdb", "data");
