@@ -92,6 +92,33 @@ std::vector<float> readParams(std::istream& input, const char* label) {
 
 } // namespace
 
+void applyLeafCorrections(const LeafCorrections& corrections,
+                          std::array<uint8_t, 512>& occupancy,
+                          std::array<float, 512>& values) {
+    for (uint8_t active : occupancy) {
+        if (active > 1) {
+            throw std::invalid_argument("leaf occupancy prediction must contain only 0 or 1");
+        }
+    }
+    for (uint16_t offset : corrections.occupancyOffsets) {
+        if (offset >= occupancy.size()) {
+            throw std::out_of_range("leaf occupancy correction offset out of range");
+        }
+        occupancy[offset] = static_cast<uint8_t>(1u - occupancy[offset]);
+    }
+    for (const auto& correction : corrections.exactValueOffsets) {
+        const uint16_t offset = correction.first;
+        const float value = correction.second;
+        if (offset >= values.size()) {
+            throw std::out_of_range("leaf value correction offset out of range");
+        }
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument("leaf exact-value correction must be finite");
+        }
+        values[offset] = value;
+    }
+}
+
 NeuralVolumeModel readZNVM(std::istream& input) {
     char magic[8]{};
     readExact(input, magic, sizeof(magic), "magic");
