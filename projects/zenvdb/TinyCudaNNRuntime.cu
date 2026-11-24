@@ -12,6 +12,7 @@
 #include <nanovdb/NanoVDB.h>
 #include <nanovdb/GridHandle.h>
 #include <nanovdb/cuda/Buffer.h>
+#include <nanovdb/cuda/GridHandle.cuh>
 #include <nanovdb/tools/cuda/PointsToGrid.cuh>
 #include <nanovdb/tools/cuda/IndexToGrid.cuh>
 #include <nanovdb/tools/cuda/GridChecksum.cuh>
