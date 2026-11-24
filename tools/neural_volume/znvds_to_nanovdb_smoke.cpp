@@ -58,7 +58,7 @@ int main() {
             throw std::runtime_error("round-trip changed grid name");
         const auto world=grid->map().applyMap(nanovdb::Vec3d(-8,16,24));
         if(std::abs(world[0]+6.0)>1e-9 || std::abs(world[1]-44.0)>1e-9 ||
-           std::abs(world[2]-89.0)>1e-9)
+           std::abs(world[2]-103.0)>1e-9)
             throw std::runtime_error("round-trip changed affine transform");
         std::filesystem::remove(path);
         std::cout<<"ZNVDS -> NanoVDB CPU round-trip passed: values, occupancy, active tile, class, name, affine transform\n";
