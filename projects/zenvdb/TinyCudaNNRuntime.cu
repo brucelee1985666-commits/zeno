@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <set>
 #include <type_traits>
 #include <utility>
 #if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
@@ -731,25 +732,35 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
         indexBuilder.mGridClass = static_cast<nanovdb::GridClass>(model.gridClass);
     }
 
-    for (const auto& tile : model.activeTiles) {
-        const nanovdb::Coord coord(tile.coord[0], tile.coord[1], tile.coord[2]);
-        switch (tile.level) {
-        case 1:
-            // Materialize the empty parent path first. Otherwise GridBuilder's
-            // deep addTile path inherits the new tile's value into sibling slots.
-            indexBuilder.getAccessor().touchLeaf(coord);
-            indexBuilder.root().template addTile<1>(coord, 1u, true);
-            break;
-        case 2:
-            indexBuilder.getAccessor().touchLeaf(coord);
-            indexBuilder.root().template addTile<2>(coord, 1u, true);
-            break;
-        case 3:
-            indexBuilder.root().template addTile<3>(coord, 1u, true);
-            break;
-        default: throw std::runtime_error("ZNVM active tile level is outside NanoVDB's supported tree levels 1..3");
-        }
+    using IndexBuildGrid = nanovdb::tools::build::Grid<nanovdb::ValueOnIndex>;
+    constexpr int32_t leafDim = static_cast<int32_t>(IndexBuildGrid::Node0::DIM);
+    constexpr int32_t lowerDim = static_cast<int32_t>(IndexBuildGrid::Node1::DIM);
+    constexpr int32_t upperDim = static_cast<int32_t>(IndexBuildGrid::Node2::DIM);
+    const auto alignDown = [](int32_t value, int32_t dim) {
+        const int64_t v = value, d = dim;
+        int64_t remainder = v % d;
+        if (remainder < 0) remainder += d;
+        return static_cast<int32_t>(v - remainder);
+    };
+    const auto nodeKey = [&](const nanovdb::Coord& coord, int32_t dim) {
+        return std::array<int32_t, 3>{
+            alignDown(coord.x(), dim), alignDown(coord.y(), dim), alignDown(coord.z(), dim)};
+    };
+    const auto tileContains = [&](const nanovdb::Coord& coord, const ActiveTile& tile) {
+        const int32_t extent = tile.level == 1 ? leafDim : tile.level == 2 ? lowerDim : upperDim;
+        const int64_t x = coord.x(), y = coord.y(), z = coord.z();
+        return x >= tile.coord[0] && x < int64_t(tile.coord[0]) + extent &&
+               y >= tile.coord[1] && y < int64_t(tile.coord[1]) + extent &&
+               z >= tile.coord[2] && z < int64_t(tile.coord[2]) + extent;
+    };
+
+    const std::string gridName = model.gridName.empty() ? "ZenoNeuralVolume" : model.gridName;
+    IndexBuildGrid indexBuilder(1u, gridName);
+    indexBuilder.mMap = makeNanoMap(model);
+    if (model.gridClass < static_cast<uint32_t>(nanovdb::GridClass::End)) {
+        indexBuilder.mGridClass = static_cast<nanovdb::GridClass>(model.gridClass);
     }
+    std::set<std::array<int32_t, 3>> lowerParentKeys;
 
     unsigned long long topologyActiveCount = 0;
     for (const auto& domain : model.domains) {
@@ -761,13 +772,19 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
             checkCuda(cudaMemcpy(hostOccupancy.data(), leaf.occupancyDevice(),
                                  hostOccupancy.size() * sizeof(uint8_t),
                                  cudaMemcpyDeviceToHost), "read compact neural leaf occupancy");
+            bool leafHasActiveVoxel = false;
             for (uint32_t i = 0; i < 512; ++i) {
                 if (hostOccupancy[i] == 0) continue;
                 const int32_t x = leaf.origin()[0] + static_cast<int32_t>(i >> 6);
                 const int32_t y = leaf.origin()[1] + static_cast<int32_t>((i >> 3) & 7);
                 const int32_t z = leaf.origin()[2] + static_cast<int32_t>(i & 7);
                 indexBuilder.setValue(nanovdb::Coord(x, y, z), 1u);
+                leafHasActiveVoxel = true;
                 ++topologyActiveCount;
+            }
+            if (leafHasActiveVoxel) {
+                lowerParentKeys.insert(nodeKey(
+                    nanovdb::Coord(leaf.origin()[0], leaf.origin()[1], leaf.origin()[2]), lowerDim));
             }
 
             appendActiveLeafVoxels<<<2, 256, 0, static_cast<cudaStream_t>(leaf.streamHandle())>>>(
@@ -782,6 +799,50 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
     }
     if (topologyActiveCount != model.sourceActiveVoxels) {
         throw std::runtime_error("host occupancy metadata count does not match ZNVM source active-voxel count");
+    }
+
+    // Insert tiles only after leaf topology exists. A level-1 tile needs its
+    // parent lower node to exist first; otherwise GridBuilder's convenience
+    // addTile path seeds the newly-created parent with the tile's active value.
+    for (const auto& tile : model.activeTiles) {
+        const nanovdb::Coord coord(tile.coord[0], tile.coord[1], tile.coord[2]);
+        switch (tile.level) {
+        case 1: {
+            const auto key = nodeKey(coord, lowerDim);
+            if (lowerParentKeys.find(key) == lowerParentKeys.end()) {
+                bool scaffolded = false;
+                for (int32_t z = 0; z < lowerDim && !scaffolded; z += leafDim) {
+                    for (int32_t y = 0; y < lowerDim && !scaffolded; y += leafDim) {
+                        for (int32_t x = 0; x < lowerDim && !scaffolded; x += leafDim) {
+                            const nanovdb::Coord candidate(key[0] + x, key[1] + y, key[2] + z);
+                            if (candidate == coord) continue;
+                            bool covered = false;
+                            for (const auto& other : model.activeTiles) {
+                                if (tileContains(candidate, other)) { covered = true; break; }
+                            }
+                            if (covered) continue;
+                            indexBuilder.getAccessor().touchLeaf(candidate);
+                            scaffolded = true;
+                        }
+                    }
+                }
+                if (!scaffolded) {
+                    throw std::runtime_error("cannot create an empty parent leaf for an isolated level-1 NanoVDB tile");
+                }
+                lowerParentKeys.insert(key);
+            }
+            indexBuilder.root().template addTile<1>(coord, 1u, true);
+            break;
+        }
+        case 2:
+            indexBuilder.root().template addTile<2>(coord, 1u, true);
+            break;
+        case 3:
+            indexBuilder.root().template addTile<3>(coord, 1u, true);
+            break;
+        default:
+            throw std::runtime_error("ZNVM active tile level is outside NanoVDB's supported tree levels 1..3");
+        }
     }
 
     unsigned long long activeCount = 0;

@@ -21,11 +21,10 @@ int main() {
     };
 
     source.setValue(probes[0], 1u);
-    // Exercise isolated branches: no existing leaf creates the parent nodes
-    // for either internal tile.
-    source.getAccessor().touchLeaf(probes[1]);
+    // The empty leaf is a sibling in the same lower node, not the tile slot.
+    source.getAccessor().touchLeaf(nanovdb::Coord(8200, 0, 0));
     source.root().template addTile<1>(probes[1], 1u, true);
-    source.getAccessor().touchLeaf(probes[2]);
+    // Root::addTile<2> creates its upper parent with inactive background.
     source.root().template addTile<2>(probes[2], 1u, true);
     source.root().template addTile<3>(probes[3], 1u, true);
 
