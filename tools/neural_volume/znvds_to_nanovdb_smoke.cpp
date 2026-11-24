@@ -45,7 +45,7 @@ int main() {
         auto handle=zeno::neural_volume::convertZnvdsToNanoVdb(path);
         const auto* grid=handle.grid<float>();
         if(!grid) throw std::runtime_error("converter returned no NanoVDB FloatGrid");
-        const nanovdb::Coord a(-8,16,24), b(-7,16,24), tileProbe(65,1,1);
+        const nanovdb::Coord a(-8,16,24), b(-8,16,25), tileProbe(65,1,1);
         if(!grid->tree().isActive(a)||!grid->tree().isActive(b))
             throw std::runtime_error("round-trip lost active leaf voxels");
         if(std::abs(grid->tree().getValue(a)-0.25f)>1e-6f ||
