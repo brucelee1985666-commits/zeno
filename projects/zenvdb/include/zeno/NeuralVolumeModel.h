@@ -57,6 +57,10 @@ struct NeuralVolumeModel {
     std::vector<EncodedDomain> domains;
 };
 
+void applyLeafCorrections(const LeafCorrections& corrections,
+                          std::array<uint8_t, 512>& occupancy,
+                          std::array<float, 512>& values);
+
 NeuralVolumeModel readZNVM(std::istream& input);
 NeuralVolumeModel readZNVMFile(const std::string& path);
 
