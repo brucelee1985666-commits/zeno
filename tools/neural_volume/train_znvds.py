@@ -146,6 +146,7 @@ def make_model(seed: int, output_dims: int = 1):
     return model, {
         "backend": "tiny-cuda-nn",
         "upstream_commit": "3daa6e5b8b8e0fa17971a1a20acfbb3754494b38",
+        "param_precision": "float16" if model.params.dtype == torch.float16 else "float32",
         "encoding": encoding,
         "network": network,
     }
