@@ -92,6 +92,35 @@ std::vector<float> readParams(std::istream& input, const char* label) {
 
 } // namespace
 
+std::vector<uint16_t> correctedActiveOffsets(
+    const LeafCorrections& corrections,
+    const std::array<float, 512>& classifierLogits,
+    std::array<uint8_t, 512>& occupancy) {
+    for (uint16_t i = 0; i < 512; ++i) {
+        if (!std::isfinite(classifierLogits[i])) {
+            throw std::invalid_argument("classifier logits must be finite");
+        }
+        occupancy[i] = classifierLogits[i] >= 0.0f ? 1u : 0u;
+    }
+    std::array<bool, 512> corrected{};
+    for (uint16_t offset : corrections.occupancyOffsets) {
+        if (offset >= 512) {
+            throw std::out_of_range("leaf occupancy correction offset out of range");
+        }
+        if (corrected[offset]) {
+            throw std::invalid_argument("duplicate leaf occupancy correction offset");
+        }
+        corrected[offset] = true;
+        occupancy[offset] = static_cast<uint8_t>(1u - occupancy[offset]);
+    }
+    std::vector<uint16_t> activeOffsets;
+    activeOffsets.reserve(512);
+    for (uint16_t i = 0; i < 512; ++i) {
+        if (occupancy[i]) activeOffsets.push_back(i);
+    }
+    return activeOffsets;
+}
+
 void applyLeafCorrections(const LeafCorrections& corrections,
                           std::array<uint8_t, 512>& occupancy,
                           std::array<float, 512>& values) {
