@@ -39,6 +39,8 @@ public:
     size_t bufferSize() const;
     uint64_t activeVoxelCount() const;
     uint64_t sourceActiveTileCount() const;
+    // Device sidecar of source active internal tiles; not yet inserted as tree tiles.
+    const void* sourceActiveTilesDevice() const;
     void wait() const;
 private:
     struct Impl;
