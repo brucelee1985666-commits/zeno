@@ -58,6 +58,7 @@ __global__ void assembleDecodedLeaf(
     occupancyOut[i] = active;
     valuesOut[i] = value;
 }
+} // namespace
 
 struct TinyCudaNNRuntime::Impl {
     std::unique_ptr<tcnn::cpp::Module> module;
