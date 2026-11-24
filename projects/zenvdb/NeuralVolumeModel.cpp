@@ -81,7 +81,12 @@ std::vector<float> readParams(std::istream& input, const char* label) {
         throw std::runtime_error(std::string("ZNVM parameter array too large: ") + label);
     }
     std::vector<float> params(static_cast<size_t>(count));
-    for (auto& value : params) value = readF32(input, label);
+    for (auto& value : params) {
+        value = readF32(input, label);
+        if (!std::isfinite(value)) {
+            throw std::runtime_error(std::string("ZNVM contains non-finite ") + label);
+        }
+    }
     return params;
 }
 
@@ -108,6 +113,9 @@ NeuralVolumeModel readZNVM(std::istream& input) {
     model.gridName = readString(input, "grid name");
     model.gridClass = readU32(input, "grid class");
     model.background = readF32(input, "background");
+    if (!std::isfinite(model.background)) {
+        throw std::runtime_error("ZNVM contains non-finite background value");
+    }
     for (auto& value : model.voxelSize) value = readF32(input, "voxel size");
     for (auto& value : model.indexToWorld) value = readF64(input, "affine transform");
 
@@ -149,6 +157,9 @@ NeuralVolumeModel readZNVM(std::istream& input) {
         for (auto& coord : tile.coord) coord = readI32(input, "tile coordinate");
         tile.level = readU32(input, "tile level");
         tile.value = readF32(input, "tile value");
+        if (!std::isfinite(tile.value)) {
+            throw std::runtime_error("ZNVM tile has non-finite value");
+        }
         if (tile.level == 0) throw std::runtime_error("ZNVM tile has invalid level");
         model.activeTiles.push_back(tile);
     }
@@ -173,7 +184,12 @@ NeuralVolumeModel readZNVM(std::istream& input) {
             domain.regressorParams = readParams(input, "regressor parameters");
         }
 
-        for (auto& metric : domain.metrics) metric = readF32(input, "domain metric");
+        for (auto& metric : domain.metrics) {
+            metric = readF32(input, "domain metric");
+            if (!std::isfinite(metric)) {
+                throw std::runtime_error("ZNVM domain contains non-finite metric");
+            }
+        }
         domain.occupancyCorrectionCount = readU32(input, "domain occupancy correction count");
         domain.valueCorrectionCount = readU32(input, "domain value correction count");
         const uint32_t leafCount = readU32(input, "domain leaf count");
@@ -192,19 +208,26 @@ NeuralVolumeModel readZNVM(std::istream& input) {
             if (occupancyCount > 512) throw std::runtime_error("ZNVM occupancy corrections exceed leaf size");
             observedOccupancyCorrections += occupancyCount;
             leaf.occupancyOffsets.reserve(occupancyCount);
+            std::array<bool, 512> seenOccupancy{};
             for (uint32_t i = 0; i < occupancyCount; ++i) {
                 const uint16_t offset = readU16(input, "occupancy correction offset");
                 if (offset >= 512) throw std::runtime_error("ZNVM occupancy offset out of range");
+                if (seenOccupancy[offset]) throw std::runtime_error("ZNVM contains duplicate occupancy correction offset");
+                seenOccupancy[offset] = true;
                 leaf.occupancyOffsets.push_back(offset);
             }
             const uint32_t valueCount = readU32(input, "leaf value correction count");
             if (valueCount > 512) throw std::runtime_error("ZNVM value corrections exceed leaf size");
             observedValueCorrections += valueCount;
             leaf.exactValueOffsets.reserve(valueCount);
+            std::array<bool, 512> seenValues{};
             for (uint32_t i = 0; i < valueCount; ++i) {
                 const uint16_t offset = readU16(input, "value correction offset");
                 const float value = readF32(input, "exact value correction");
                 if (offset >= 512) throw std::runtime_error("ZNVM value offset out of range");
+                if (seenValues[offset]) throw std::runtime_error("ZNVM contains duplicate exact-value correction offset");
+                if (!std::isfinite(value)) throw std::runtime_error("ZNVM contains non-finite exact-value correction");
+                seenValues[offset] = true;
                 leaf.exactValueOffsets.emplace_back(offset, value);
             }
             domain.leaves.push_back(std::move(leaf));
