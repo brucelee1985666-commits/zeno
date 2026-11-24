@@ -48,7 +48,7 @@ __global__ void assembleDecodedLeaf(
     for (uint32_t c = 0; c < occupancyCount; ++c) {
         if (occupancyOffsets[c] == i) active = static_cast<uint8_t>(1u - active);
     }
-    float value = hasRegressor ? normalizedValues[i] * valueScale + valueCenter : background;
+    float value = (hasRegressor && active) ? normalizedValues[i] * valueScale + valueCenter : background;
     bool exactFound = false;
     for (uint32_t c = 0; c < exactCount; ++c) {
         if (exactOffsets[c] == i) { value = exactValues[c]; exactFound = true; }
