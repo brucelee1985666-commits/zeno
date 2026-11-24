@@ -253,12 +253,23 @@ def encode_domain(key, leaves, args):
         value_rmse = float(np.sqrt(np.mean(errors * errors)))
 
         value_cursor = 0
+        boundary_exact_voxels = 0
         for leaf_index, leaf in enumerate(leaves):
             corrections = []
+            # Each domain is an independent local neural field. Preserve a
+            # one-leaf exact-value shell at its six faces so adjacent domains
+            # cannot expose a value discontinuity at their shared boundary.
+            boundary_leaf = False
+            for axis in range(3):
+                local_origin = int(leaf["origin"][axis] - domain_origin[axis])
+                if local_origin < 8 or local_origin + 8 > args.domain_size - 8:
+                    boundary_leaf = True
             for offset, exact_value in leaf["values"]:
                 error = abs(float(pred_values[value_cursor]) - exact_value)
-                if error > args.value_tolerance:
+                if boundary_leaf or error > args.value_tolerance:
                     corrections.append((int(offset), float(exact_value)))
+                    if boundary_leaf:
+                        boundary_exact_voxels += 1
                 value_cursor += 1
             value_corrections[leaf_index] = corrections
 
@@ -298,6 +309,7 @@ def encode_domain(key, leaves, args):
             "occupancy_recall": float(occupancy_recall),
             "occupancy_corrections": sum(len(x) for x in occupancy_corrections),
             "value_rmse_before_corrections": value_rmse,
+            "boundary_exact_voxels": boundary_exact_voxels if regressor_payload is not None else sum(len(x) for x in value_corrections),
             "value_corrections": sum(len(x) for x in value_corrections),
         },
     }
