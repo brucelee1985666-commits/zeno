@@ -65,7 +65,7 @@ struct TinyCudaNNRuntime::Impl {
     void* params = nullptr;
     void* inputScratch = nullptr;
     void* outputScratch = nullptr;
-    float* compactScratch = nullptr;
+    void* compactScratch = nullptr;
     size_t inputCapacity = 0;
     size_t outputCapacityBytes = 0;
     size_t compactCapacity = 0;
@@ -146,16 +146,16 @@ std::vector<float> TinyCudaNNRuntime::infer(const std::vector<std::array<float, 
         const size_t compactBytes = static_cast<size_t>(batch) * sizeof(float);
         m_impl->ensureBuffer(&m_impl->inputScratch, m_impl->inputCapacity, inputBytes, "allocate inference input scratch");
         m_impl->ensureBuffer(&m_impl->outputScratch, m_impl->outputCapacityBytes, outputBytes, "allocate inference output scratch");
-        m_impl->ensureBuffer(reinterpret_cast<void**>(&m_impl->compactScratch), m_impl->compactCapacity, compactBytes, "allocate compact output scratch");
+        m_impl->ensureBuffer(&m_impl->compactScratch, m_impl->compactCapacity, compactBytes, "allocate compact output scratch");
         checkCuda(cudaMemcpyAsync(m_impl->inputScratch, hostInput.data(), inputBytes, cudaMemcpyHostToDevice, m_impl->stream), "upload inference coordinates");
         const uint32_t blocks = (batch + 255) / 256;
         std::vector<float> hostOutput(batch);
         if (m_impl->outputFp16) {
             m_impl->module->inference(m_impl->stream, batch, static_cast<const float*>(m_impl->inputScratch), m_impl->outputScratch, m_impl->params);
-            compactHalf<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const __half*>(m_impl->outputScratch), m_impl->compactScratch, batch);
+            compactHalf<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const __half*>(m_impl->outputScratch), static_cast<float*>(m_impl->compactScratch), batch);
         } else {
             m_impl->module->inference(m_impl->stream, batch, static_cast<const float*>(m_impl->inputScratch), m_impl->outputScratch, m_impl->params);
-            compactFloat<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const float*>(m_impl->outputScratch), m_impl->compactScratch, batch);
+            compactFloat<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const float*>(m_impl->outputScratch), static_cast<float*>(m_impl->compactScratch), batch);
         }
         checkCuda(cudaGetLastError(), "compact inference output");
         checkCuda(cudaMemcpyAsync(hostOutput.data(), m_impl->compactScratch, compactBytes, cudaMemcpyDeviceToHost, m_impl->stream), "download inference output");
@@ -198,14 +198,14 @@ void TinyCudaNNRuntime::inferDevice(const std::vector<std::array<float, 3>>& poi
     const size_t compactBytes = static_cast<size_t>(batch) * sizeof(float);
     m_impl->ensureBuffer(&m_impl->inputScratch, m_impl->inputCapacity, inputBytes, "allocate device inference input scratch");
     m_impl->ensureBuffer(&m_impl->outputScratch, m_impl->outputCapacityBytes, outputBytes, "allocate device inference output scratch");
-    m_impl->ensureBuffer(reinterpret_cast<void**>(&m_impl->compactScratch), m_impl->compactCapacity, compactBytes, "allocate device inference compact scratch");
+    m_impl->ensureBuffer(&m_impl->compactScratch, m_impl->compactCapacity, compactBytes, "allocate device inference compact scratch");
     checkCuda(cudaMemcpyAsync(m_impl->inputScratch, hostInput.data(), inputBytes, cudaMemcpyHostToDevice, m_impl->stream), "upload device inference coordinates");
     m_impl->module->inference(m_impl->stream, batch, static_cast<const float*>(m_impl->inputScratch), m_impl->outputScratch, m_impl->params);
     const uint32_t blocks = (batch + 255) / 256;
     if (m_impl->outputFp16) {
-        compactHalf<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const __half*>(m_impl->outputScratch), m_impl->compactScratch, batch);
+        compactHalf<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const __half*>(m_impl->outputScratch), static_cast<float*>(m_impl->compactScratch), batch);
     } else {
-        compactFloat<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const float*>(m_impl->outputScratch), m_impl->compactScratch, batch);
+        compactFloat<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const float*>(m_impl->outputScratch), static_cast<float*>(m_impl->compactScratch), batch);
     }
     checkCuda(cudaGetLastError(), "compact device inference output");
     checkCuda(cudaMemcpyAsync(deviceOutput, m_impl->compactScratch, static_cast<size_t>(count) * sizeof(float), cudaMemcpyDeviceToDevice, m_impl->stream), "copy device inference result");
