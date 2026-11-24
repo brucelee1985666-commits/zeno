@@ -60,6 +60,18 @@ if (ZENO_WITH_TINY_CUDA_NN)
     target_link_libraries(zeno PRIVATE tiny-cuda-nn)
     set_target_properties(zeno PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
     target_compile_definitions(zeno PRIVATE ZENO_WITH_TINY_CUDA_NN=1)
+
+    # Use the upstream NanoVDB GPU builders when this OpenVDB/NanoVDB revision
+    # provides them. Older vendored revisions keep the neural decoder available
+    # but compile a clear runtime-unavailable fallback for the NanoVDB bridge.
+    if (ZENO_NANOVDB_INCLUDE_DIR
+        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/PointsToGrid.cuh"
+        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/IndexToGrid.cuh")
+        target_compile_definitions(zeno PRIVATE ZENO_WITH_NANOVDB_CUDA_BUILDERS=1)
+        message(STATUS "NanoVDB CUDA PointsToGrid + IndexToGrid bridge enabled")
+    else()
+        message(STATUS "NanoVDB CUDA builders unavailable in this header set; device grid bridge will report unavailable")
+    endif()
 endif()
 
 target_include_directories(zeno PUBLIC
