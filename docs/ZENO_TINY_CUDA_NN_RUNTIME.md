@@ -39,9 +39,13 @@ the decoder checks this rather than silently returning background values.
 This is lazy GPU neural inference with one-leaf CPU output. It avoids
 reconstructing the entire volume as a CPU OpenVDB grid, but it is not yet a
 direct NanoVDB GPU-grid writer, a ZenoCompute device object, or a renderer node.
-The caller still receives the decoded leaf arrays on the CPU. A subsequent
-integration must stream these leaf results into a GPU-resident NanoVDB/volume
-representation without expanding the full tree on the host.
+The caller receives decoded leaf arrays on the CPU and can inspect the original
+source metadata, affine transform, and preserved active tiles through
+`sourceModel()`. A subsequent integration must stream these leaf results into
+a GPU-resident NanoVDB/volume representation without expanding the full tree
+on the host. A decoder instance is not thread-safe because it maintains one
+active domain runtime; serialize calls per instance or use one instance per
+worker.
 
 The checkpoint format currently stores one shared model configuration for
 classifier and regressor networks; this is valid because the trainer creates
