@@ -292,27 +292,44 @@ struct NeuralVolumeDecoder::Impl {
     };
     NeuralVolumeModel model;
     std::string configText;
+    struct CachedDomainRuntime {
+        std::unique_ptr<DomainRuntime> runtime;
+        uint64_t lastUse = 0;
+    };
+    static constexpr size_t kMaxResidentDomains = 2;
     std::map<std::array<int32_t, 3>, size_t> domainByKey;
     std::map<std::array<int32_t, 3>, LeafRecord> leaves;
-    std::unique_ptr<DomainRuntime> activeRuntime;
-    size_t activeDomainIndex = std::numeric_limits<size_t>::max();
+    std::map<size_t, CachedDomainRuntime> domainCache;
+    uint64_t cacheClock = 0;
 
     DomainRuntime& runtimeFor(size_t index) {
         if (index >= model.domains.size()) throw std::out_of_range("ZNVM domain index is invalid");
-        if (!activeRuntime || activeDomainIndex != index) {
-            const auto& source = model.domains[index];
-            auto runtime = std::make_unique<DomainRuntime>();
-            runtime->classifier = std::make_unique<TinyCudaNNRuntime>(configText, source.classifierParams);
-            runtime->hasRegressor = source.hasRegressor;
-            runtime->valueCenter = source.valueCenter;
-            runtime->valueScale = source.valueScale;
-            if (source.hasRegressor) {
-                runtime->regressor = std::make_unique<TinyCudaNNRuntime>(configText, source.regressorParams);
-            }
-            activeRuntime = std::move(runtime);
-            activeDomainIndex = index;
+        auto found = domainCache.find(index);
+        if (found != domainCache.end()) {
+            found->second.lastUse = ++cacheClock;
+            return *found->second.runtime;
         }
-        return *activeRuntime;
+
+        const auto& source = model.domains[index];
+        auto runtime = std::make_unique<DomainRuntime>();
+        runtime->classifier = std::make_unique<TinyCudaNNRuntime>(configText, source.classifierParams);
+        runtime->hasRegressor = source.hasRegressor;
+        runtime->valueCenter = source.valueCenter;
+        runtime->valueScale = source.valueScale;
+        if (source.hasRegressor) {
+            runtime->regressor = std::make_unique<TinyCudaNNRuntime>(configText, source.regressorParams);
+        }
+
+        if (domainCache.size() >= kMaxResidentDomains) {
+            auto victim = domainCache.begin();
+            for (auto it = std::next(domainCache.begin()); it != domainCache.end(); ++it) {
+                if (it->second.lastUse < victim->second.lastUse) victim = it;
+            }
+            domainCache.erase(victim);
+        }
+        auto inserted = domainCache.emplace(
+            index, CachedDomainRuntime{std::move(runtime), ++cacheClock});
+        return *inserted.first->second.runtime;
     }
 };
 
