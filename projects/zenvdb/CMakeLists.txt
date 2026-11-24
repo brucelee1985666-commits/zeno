@@ -84,7 +84,8 @@ if (ZENO_WITH_TINY_CUDA_NN)
             ZENO_WITH_NANOVDB_CUDA_BUILDERS=1)
         set_target_properties(zeno_neuralvolume_cuda PROPERTIES
             CUDA_STANDARD 17
-            CUDA_STANDARD_REQUIRED ON)
+            CUDA_STANDARD_REQUIRED ON
+            POSITION_INDEPENDENT_CODE ON)
         target_sources(zeno PRIVATE $<TARGET_OBJECTS:zeno_neuralvolume_cuda>)
         message(STATUS "Native-tile NanoVDB bridge enabled with pinned upstream GridBuilder + IndexToGrid")
     else()

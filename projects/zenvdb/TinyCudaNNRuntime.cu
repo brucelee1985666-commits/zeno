@@ -793,6 +793,24 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
     auto hostIndexHandle = nanovdb::tools::createNanoGrid(indexBuilder, 0u, false, true, 0);
     auto* hostIndexGrid = hostIndexHandle.template grid<nanovdb::ValueOnIndex>();
     if (!hostIndexGrid) throw std::runtime_error("NanoVDB GridBuilder did not produce a ValueOnIndex grid");
+    if (hostIndexGrid->valueCount() != sidecarCapacity) {
+        throw std::runtime_error("NanoVDB ValueOnIndex count does not match the ZNVM leaf-plus-tile value count");
+    }
+    auto hostIndexAccessor = hostIndexGrid->getAccessor();
+    std::vector<uint64_t> hostTileIndices;
+    hostTileIndices.reserve(model.activeTiles.size());
+    for (const auto& tile : model.activeTiles) {
+        const uint64_t index = hostIndexAccessor.getValue(
+            nanovdb::Coord(tile.coord[0], tile.coord[1], tile.coord[2]));
+        if (index == 0 || index > sidecarValueCount) {
+            throw std::runtime_error("NanoVDB GridBuilder omitted an active internal tile from the index topology");
+        }
+        hostTileIndices.push_back(index);
+    }
+    std::sort(hostTileIndices.begin(), hostTileIndices.end());
+    if (std::adjacent_find(hostTileIndices.begin(), hostTileIndices.end()) != hostTileIndices.end()) {
+        throw std::runtime_error("NanoVDB assigned duplicate ValueOnIndex slots to distinct active tiles");
+    }
 
     std::vector<TileDeviceRecord> hostTiles;
     hostTiles.reserve(model.activeTiles.size());

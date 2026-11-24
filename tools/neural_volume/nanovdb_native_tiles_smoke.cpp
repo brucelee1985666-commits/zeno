@@ -29,6 +29,10 @@ int main() {
     const auto* indexGrid = hostHandle.grid<BuildT>();
     if (!indexGrid) throw std::runtime_error("CreateNanoGrid returned no ValueOnIndex grid");
 
+    if (indexGrid->valueCount() != probes.size() + 1) {
+        throw std::runtime_error("ValueOnIndex count did not include background, leaf voxel, and all three active tiles");
+    }
+
     auto accessor = indexGrid->getAccessor();
     std::array<uint32_t, probes.size()> indices{};
     for (size_t i = 0; i < probes.size(); ++i) {
