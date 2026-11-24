@@ -15,7 +15,7 @@ from typing import BinaryIO
 
 MAGIC = b"ZNVDS001"
 VERSION = 1
-HEADER_FLAGS_FLOAT_INDEX_SPACE = 1
+HEADER_FLAGS_FLOAT_INDEX_SPACE_AFFINE = 3
 
 
 class DatasetError(ValueError):
@@ -62,7 +62,7 @@ def inspect_dataset(path: str | Path) -> dict:
             raise DatasetError(f"unsupported ZNVDS version: {version}")
 
         flags = _u32(stream, "flags")
-        if flags != HEADER_FLAGS_FLOAT_INDEX_SPACE:
+        if flags != HEADER_FLAGS_FLOAT_INDEX_SPACE_AFFINE:
             raise DatasetError(f"unsupported flags: 0x{flags:08x}")
 
         leaf_count = _u64(stream, "leaf count")
@@ -73,6 +73,13 @@ def inspect_dataset(path: str | Path) -> dict:
         name = _read_exact(stream, name_size, "grid name").decode("utf-8")
         background = _f32(stream, "background")
         voxel_size = [_f32(stream, f"voxel size[{i}]") for i in range(3)]
+        affine_transform = [
+            struct.unpack("<d", _read_exact(stream, 8, f"affine matrix[{row},{column}]"))[0]
+            for row in range(4)
+            for column in range(4)
+        ]
+        if any(not math.isfinite(v) for v in affine_transform):
+            raise DatasetError("affine transform contains non-finite values")
 
         tiles = []
         for index in range(tile_count):
@@ -132,6 +139,7 @@ def inspect_dataset(path: str | Path) -> dict:
         "grid_name": name,
         "background": background,
         "voxel_size": voxel_size,
+        "index_to_world_affine_row_major": affine_transform,
         "leaf_blocks": leaf_count,
         "active_tiles": tile_count,
         "active_voxels": active_voxel_count,
