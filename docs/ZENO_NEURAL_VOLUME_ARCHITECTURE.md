@@ -118,7 +118,7 @@ Foi adicionado `tools/neural_volume/train_znvds.py`, usando a extensão Python d
 - domínios pequenos que não justificam um regressor guardam os valores explicitamente;
 - métricas incluem accuracy, IoU, precision/recall, contagem de correções e RMSE pré-correção.
 
-A saída `.znvm` é um checkpoint experimental PyTorch/tiny-cuda-nn, não um formato final independente de backend. Ainda não existe decoder C++ do Zeno para esse checkpoint. A correção de topologia depende de inferência numericamente compatível com a usada durante a codificação; isso precisa ser validado antes de prometer topologia lossless entre plataformas.
+A saída `.znvm` agora é um contêiner binário little-endian com parâmetros tiny-cuda-nn e registros de correção, acompanhado de um inspetor Python. Ainda não existe decoder C++ do Zeno para esse contêiner. A correção de topologia depende de inferência numericamente compatível com a usada durante a codificação; isso precisa ser validado antes de prometer topologia lossless entre plataformas. O contêiner registra os hiperparâmetros do modelo, mas a integração C++ ainda precisa recriar a mesma configuração tiny-cuda-nn e carregar seus parâmetros.
 
 Dependências do treinamento: Python, NumPy, PyTorch com CUDA e tiny-cuda-nn instalado conforme as instruções upstream. A extensão tiny-cuda-nn exige GPU NVIDIA e não oferece fallback CPU. O treinamento real não foi executado nesta etapa porque não há uma GPU de execução disponível nesta sessão.
 
