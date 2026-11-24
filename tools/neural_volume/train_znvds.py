@@ -460,7 +460,9 @@ def main():
         }))
 
     partial = len(ordered_keys) != len(domains)
-    model_config = encoded[0]["classifier"]["config"]
+    model_config = dict(encoded[0]["classifier"]["config"])
+    model_config["training_seed"] = int(args.seed)
+    model_config["deterministic_domain_minibatches"] = True
     source_hash = sha256_file(args.dataset)
     write_znvm(args.output, metadata, tiles, encoded, args, source_hash, partial, model_config)
     print(json.dumps({
