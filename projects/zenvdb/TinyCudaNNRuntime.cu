@@ -36,7 +36,29 @@ __global__ void compactHalf(const __half* src, float* dst, uint32_t n) {
     uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) dst[i] = __half2float(src[i]);
 }
+__global__ void assembleDecodedLeaf(
+    const float* logits, const float* normalizedValues, bool hasRegressor,
+    float valueCenter, float valueScale, float background,
+    const uint16_t* occupancyOffsets, uint32_t occupancyCount,
+    const uint16_t* exactOffsets, const float* exactValues, uint32_t exactCount,
+    uint8_t* occupancyOut, float* valuesOut, int* validationError) {
+    const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= 512) return;
+    uint8_t active = logits[i] >= 0.0f ? 1u : 0u;
+    for (uint32_t c = 0; c < occupancyCount; ++c) {
+        if (occupancyOffsets[c] == i) active = static_cast<uint8_t>(1u - active);
+    }
+    float value = hasRegressor ? normalizedValues[i] * valueScale + valueCenter : background;
+    bool exactFound = false;
+    for (uint32_t c = 0; c < exactCount; ++c) {
+        if (exactOffsets[c] == i) { value = exactValues[c]; exactFound = true; }
+    }
+    if (active && !hasRegressor && !exactFound) atomicExch(validationError, 1);
+    if (active && !isfinite(value)) atomicExch(validationError, 2);
+    occupancyOut[i] = active;
+    valuesOut[i] = value;
 }
+
 struct TinyCudaNNRuntime::Impl {
     std::unique_ptr<tcnn::cpp::Module> module;
     cudaStream_t stream = nullptr;
@@ -156,34 +178,39 @@ void TinyCudaNNRuntime::inferDevice(const std::vector<std::array<float, 3>>& poi
     if (points.empty()) return;
     if (!deviceOutput) throw std::invalid_argument("device inference output pointer is null");
     const uint32_t granularity = std::max<uint32_t>(1, tcnn::cpp::batch_size_granularity());
-    if (points.size() > 65536 || points.size() % granularity != 0) {
-        throw std::invalid_argument("device inference batch must fit the runtime and match tiny-cuda-nn batch granularity");
+    constexpr uint32_t maxBatch = 65536;
+    if (points.size() > maxBatch || granularity > maxBatch) {
+        throw std::invalid_argument("device inference batch exceeds tiny-cuda-nn runtime limit");
     }
-    const uint32_t batch = static_cast<uint32_t>(points.size());
+    const uint32_t count = static_cast<uint32_t>(points.size());
+    const uint32_t batch = ((count + granularity - 1) / granularity) * granularity;
     std::vector<float> hostInput(static_cast<size_t>(batch) * 3);
     for (uint32_t i = 0; i < batch; ++i) {
+        const auto& point = points[std::min(i, count - 1)];
         for (unsigned axis = 0; axis < 3; ++axis) {
-            if (!std::isfinite(points[i][axis])) throw std::invalid_argument("non-finite inference coordinate");
-            hostInput[static_cast<size_t>(axis) * batch + i] = points[i][axis];
+            if (!std::isfinite(point[axis])) throw std::invalid_argument("non-finite inference coordinate");
+            hostInput[static_cast<size_t>(axis) * batch + i] = point[axis];
         }
     }
     const size_t inputBytes = hostInput.size() * sizeof(float);
     const size_t outputElements = static_cast<size_t>(batch) * m_impl->outputWidth;
     const size_t outputBytes = outputElements * (m_impl->outputFp16 ? sizeof(__half) : sizeof(float));
+    const size_t compactBytes = static_cast<size_t>(batch) * sizeof(float);
     m_impl->ensureBuffer(&m_impl->inputScratch, m_impl->inputCapacity, inputBytes, "allocate device inference input scratch");
     m_impl->ensureBuffer(&m_impl->outputScratch, m_impl->outputCapacityBytes, outputBytes, "allocate device inference output scratch");
+    m_impl->ensureBuffer(reinterpret_cast<void**>(&m_impl->compactScratch), m_impl->compactCapacity, compactBytes, "allocate device inference compact scratch");
     checkCuda(cudaMemcpyAsync(m_impl->inputScratch, hostInput.data(), inputBytes, cudaMemcpyHostToDevice, m_impl->stream), "upload device inference coordinates");
     m_impl->module->inference(m_impl->stream, batch, static_cast<const float*>(m_impl->inputScratch), m_impl->outputScratch, m_impl->params);
     const uint32_t blocks = (batch + 255) / 256;
     if (m_impl->outputFp16) {
-        compactHalf<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const __half*>(m_impl->outputScratch), static_cast<float*>(deviceOutput), batch);
+        compactHalf<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const __half*>(m_impl->outputScratch), m_impl->compactScratch, batch);
     } else {
-        compactFloat<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const float*>(m_impl->outputScratch), static_cast<float*>(deviceOutput), batch);
+        compactFloat<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const float*>(m_impl->outputScratch), m_impl->compactScratch, batch);
     }
     checkCuda(cudaGetLastError(), "compact device inference output");
+    checkCuda(cudaMemcpyAsync(deviceOutput, m_impl->compactScratch, static_cast<size_t>(count) * sizeof(float), cudaMemcpyDeviceToDevice, m_impl->stream), "copy device inference result");
     checkCuda(cudaStreamSynchronize(m_impl->stream), "synchronize device inference");
 }
-
 
 struct DecodedNeuralLeafDevice::Impl {
     std::array<int32_t, 3> leafOrigin{};
