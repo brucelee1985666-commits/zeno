@@ -150,6 +150,82 @@ std::vector<float> TinyCudaNNRuntime::infer(const std::vector<std::array<float, 
 #include <sstream>
 
 namespace zeno::neuralvolume {
+
+void TinyCudaNNRuntime::inferDevice(const std::vector<std::array<float, 3>>& points, void* deviceOutput) {
+    if (!m_impl || !m_impl->module) throw std::logic_error("tiny-cuda-nn runtime is not initialized");
+    if (points.empty()) return;
+    if (!deviceOutput) throw std::invalid_argument("device inference output pointer is null");
+    const uint32_t granularity = std::max<uint32_t>(1, tcnn::cpp::batch_size_granularity());
+    if (points.size() > 65536 || points.size() % granularity != 0) {
+        throw std::invalid_argument("device inference batch must fit the runtime and match tiny-cuda-nn batch granularity");
+    }
+    const uint32_t batch = static_cast<uint32_t>(points.size());
+    std::vector<float> hostInput(static_cast<size_t>(batch) * 3);
+    for (uint32_t i = 0; i < batch; ++i) {
+        for (unsigned axis = 0; axis < 3; ++axis) {
+            if (!std::isfinite(points[i][axis])) throw std::invalid_argument("non-finite inference coordinate");
+            hostInput[static_cast<size_t>(axis) * batch + i] = points[i][axis];
+        }
+    }
+    const size_t inputBytes = hostInput.size() * sizeof(float);
+    const size_t outputElements = static_cast<size_t>(batch) * m_impl->outputWidth;
+    const size_t outputBytes = outputElements * (m_impl->outputFp16 ? sizeof(__half) : sizeof(float));
+    m_impl->ensureBuffer(&m_impl->inputScratch, m_impl->inputCapacity, inputBytes, "allocate device inference input scratch");
+    m_impl->ensureBuffer(&m_impl->outputScratch, m_impl->outputCapacityBytes, outputBytes, "allocate device inference output scratch");
+    checkCuda(cudaMemcpyAsync(m_impl->inputScratch, hostInput.data(), inputBytes, cudaMemcpyHostToDevice, m_impl->stream), "upload device inference coordinates");
+    m_impl->module->inference(m_impl->stream, batch, static_cast<const float*>(m_impl->inputScratch), m_impl->outputScratch, m_impl->params);
+    const uint32_t blocks = (batch + 255) / 256;
+    if (m_impl->outputFp16) {
+        compactHalf<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const __half*>(m_impl->outputScratch), static_cast<float*>(deviceOutput), batch);
+    } else {
+        compactFloat<<<blocks, 256, 0, m_impl->stream>>>(static_cast<const float*>(m_impl->outputScratch), static_cast<float*>(deviceOutput), batch);
+    }
+    checkCuda(cudaGetLastError(), "compact device inference output");
+    checkCuda(cudaStreamSynchronize(m_impl->stream), "synchronize device inference");
+}
+
+
+struct DecodedNeuralLeafDevice::Impl {
+    std::array<int32_t, 3> leafOrigin{};
+    cudaStream_t stream = nullptr;
+    uint8_t* occupancy = nullptr;
+    float* values = nullptr;
+    int* validationError = nullptr;
+    mutable bool checked = false;
+    ~Impl() {
+        if (stream) cudaStreamSynchronize(stream);
+        if (occupancy) cudaFree(occupancy);
+        if (values) cudaFree(values);
+        if (validationError) cudaFree(validationError);
+        if (stream) cudaStreamDestroy(stream);
+    }
+};
+DecodedNeuralLeafDevice::DecodedNeuralLeafDevice() = default;
+DecodedNeuralLeafDevice::~DecodedNeuralLeafDevice() = default;
+DecodedNeuralLeafDevice::DecodedNeuralLeafDevice(DecodedNeuralLeafDevice&&) noexcept = default;
+DecodedNeuralLeafDevice& DecodedNeuralLeafDevice::operator=(DecodedNeuralLeafDevice&&) noexcept = default;
+const std::array<int32_t, 3>& DecodedNeuralLeafDevice::origin() const {
+    if (!m_impl) throw std::logic_error("device leaf is not initialized");
+    return m_impl->leafOrigin;
+}
+const void* DecodedNeuralLeafDevice::occupancyDevice() const {
+    if (!m_impl) throw std::logic_error("device leaf is not initialized");
+    return m_impl->occupancy;
+}
+const void* DecodedNeuralLeafDevice::valuesDevice() const {
+    if (!m_impl) throw std::logic_error("device leaf is not initialized");
+    return m_impl->values;
+}
+void DecodedNeuralLeafDevice::wait() const {
+    if (!m_impl) throw std::logic_error("device leaf is not initialized");
+    checkCuda(cudaStreamSynchronize(m_impl->stream), "synchronize decoded device leaf");
+    int error = 0;
+    checkCuda(cudaMemcpy(&error, m_impl->validationError, sizeof(error), cudaMemcpyDeviceToHost), "read decoded leaf validation status");
+    m_impl->checked = true;
+    if (error == 1) throw std::runtime_error("leaf without a regressor is missing an exact active voxel value");
+    if (error == 2) throw std::runtime_error("decoded active voxel value is not finite");
+}
+
 struct NeuralVolumeDecoder::Impl {
     struct DomainRuntime {
         std::unique_ptr<TinyCudaNNRuntime> classifier;
@@ -322,5 +398,64 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
         }
     }
     return decoded;
+}
+
+DecodedNeuralLeafDevice NeuralVolumeDecoder::decodeLeafDevice(const std::array<int32_t, 3>& origin) {
+    if (!m_impl) throw std::logic_error("neural volume decoder is not initialized");
+    const auto leafIt = m_impl->leaves.find(origin);
+    if (leafIt == m_impl->leaves.end()) throw std::out_of_range("requested leaf is not present in ZNVM");
+    const auto& record = leafIt->second;
+    const auto& ownedModel = m_impl->model;
+    const auto& domain = m_impl->runtimeFor(record.domainIndex);
+    const auto& sourceDomain = ownedModel.domains.at(record.domainIndex);
+    const auto& corrections = sourceDomain.leaves.at(record.leafIndex);
+    const auto key = domainKeyForLeaf(origin, ownedModel.domainSizeVoxels);
+    std::array<int32_t, 3> domainOrigin{};
+    for (size_t axis = 0; axis < 3; ++axis) {
+        const int64_t coordinate = static_cast<int64_t>(key[axis]) * ownedModel.domainSizeVoxels;
+        if (coordinate < std::numeric_limits<int32_t>::min() || coordinate > std::numeric_limits<int32_t>::max())
+            throw std::overflow_error("ZNVM domain origin exceeds index coordinate range");
+        domainOrigin[axis] = static_cast<int32_t>(coordinate);
+    }
+    const auto points = normalizedLeafCoordinates(origin, domainOrigin, ownedModel.domainSizeVoxels);
+    DecodedNeuralLeafDevice result;
+    result.m_impl = std::make_unique<DecodedNeuralLeafDevice::Impl>();
+    result.m_impl->leafOrigin = origin;
+    checkCuda(cudaStreamCreateWithFlags(&result.m_impl->stream, cudaStreamNonBlocking), "create decoded leaf stream");
+    checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->occupancy), 512 * sizeof(uint8_t)), "allocate decoded occupancy");
+    checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->values), 512 * sizeof(float)), "allocate decoded values");
+    checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->validationError), sizeof(int)), "allocate decoded validation flag");
+    checkCuda(cudaMemsetAsync(result.m_impl->validationError, 0, sizeof(int), result.m_impl->stream), "clear decoded validation flag");
+
+    DeviceBuffer<float> logits(512);
+    DeviceBuffer<float> regressed(512);
+    domain.classifier->inferDevice(points, logits.get());
+    if (domain.hasRegressor) domain.regressor->inferDevice(points, regressed.get());
+
+    DeviceBuffer<uint16_t> occupancyOffsets(std::max<size_t>(1, corrections.occupancyOffsets.size()));
+    DeviceBuffer<uint16_t> exactOffsets(std::max<size_t>(1, corrections.exactValueOffsets.size()));
+    DeviceBuffer<float> exactValues(std::max<size_t>(1, corrections.exactValueOffsets.size()));
+    if (!corrections.occupancyOffsets.empty())
+        checkCuda(cudaMemcpy(occupancyOffsets.get(), corrections.occupancyOffsets.data(), corrections.occupancyOffsets.size() * sizeof(uint16_t), cudaMemcpyHostToDevice), "upload occupancy corrections");
+    std::vector<uint16_t> exactOffsetHost;
+    std::vector<float> exactValueHost;
+    exactOffsetHost.reserve(corrections.exactValueOffsets.size());
+    exactValueHost.reserve(corrections.exactValueOffsets.size());
+    for (const auto& correction : corrections.exactValueOffsets) {
+        exactOffsetHost.push_back(correction.first);
+        exactValueHost.push_back(correction.second);
+    }
+    if (!exactOffsetHost.empty()) {
+        checkCuda(cudaMemcpy(exactOffsets.get(), exactOffsetHost.data(), exactOffsetHost.size() * sizeof(uint16_t), cudaMemcpyHostToDevice), "upload exact-value offsets");
+        checkCuda(cudaMemcpy(exactValues.get(), exactValueHost.data(), exactValueHost.size() * sizeof(float), cudaMemcpyHostToDevice), "upload exact-value corrections");
+    }
+    assembleDecodedLeaf<<<2, 256, 0, result.m_impl->stream>>>(
+        logits.get(), regressed.get(), domain.hasRegressor, domain.valueCenter, domain.valueScale, ownedModel.background,
+        occupancyOffsets.get(), static_cast<uint32_t>(corrections.occupancyOffsets.size()),
+        exactOffsets.get(), exactValues.get(), static_cast<uint32_t>(corrections.exactValueOffsets.size()),
+        result.m_impl->occupancy, result.m_impl->values, result.m_impl->validationError);
+    checkCuda(cudaGetLastError(), "assemble decoded device leaf");
+    result.wait();
+    return result;
 }
 } // namespace zeno::neuralvolume
