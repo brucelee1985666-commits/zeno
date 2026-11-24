@@ -10,6 +10,9 @@ set(OPENVDB_BUILD_UNITTESTS OFF CACHE BOOL "" FORCE)
 set(OPENVDB_BUILD_PYTHON_MODULE OFF CACHE BOOL "" FORCE)
 set(OPENVDB_BUILD_NANOVDB OFF CACHE BOOL "" FORCE)
 set(OPENVDB_BUILD_CORE ON CACHE BOOL "" FORCE)
+# Match Zeno's own vendored OpenVDB linkage and avoid building both library variants.
+set(OPENVDB_CORE_SHARED OFF CACHE BOOL "" FORCE)
+set(OPENVDB_CORE_STATIC ON CACHE BOOL "" FORCE)
 set(USE_NANOVDB OFF CACHE BOOL "" FORCE)
 # The fixture never writes .vdb compression streams. Disable legacy vendored
 # Blosc/ZLIB here to avoid rebuilding old bundled C code with newer CI compilers.
