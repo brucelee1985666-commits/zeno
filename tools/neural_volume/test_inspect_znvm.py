@@ -27,7 +27,7 @@ def make_model(*, partial=False, trailing=b""):
         struct.pack("<iii", 0, 0, 0),
         struct.pack("<Qf", 1, 0.5),
         struct.pack("<I", 0),  # no regressor
-        struct.pack("<fffffII", 1.0, 1.0, 1.0, 1.0, -1.0, 0, 2),
+        struct.pack("<fffffII", 1.0, 1.0, 1.0, 1.0, -1.0, 1, 1),
         struct.pack("<I", 1),  # one leaf
         struct.pack("<iii", 0, 0, 0),
         struct.pack("<IH", 1, 7),
