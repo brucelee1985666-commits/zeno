@@ -60,8 +60,13 @@ The repository also contains a CPU-only end-to-end converter:
   then emits a host `NanoVDB FloatGrid` with `createNanoGrid`.
 - The conversion preserves the stored affine index-to-world transform, grid
   name, grid class, background, active topology and scalar values.
-- CI writes a synthetic ZNVDS fixture and verifies voxel occupancy/values, an
-  active tile, grid class/name and a non-uniform affine transform after conversion.
+- CI writes a synthetic ZNVDS fixture and verifies voxel occupancy/values, active
+  tiles at all three NanoVDB hierarchy levels, grid class/name and a non-uniform
+  affine transform after conversion.
+- The smoke test then serializes the grid to `.nvdb`, reopens that exact file with
+  NanoVDB's `io::readGrid`, and repeats the topology/value/metadata/transform
+  assertions against the reloaded grid. It also checks that truncated ZNVDS and
+  NanoVDB files are rejected.
 - This is a lossless CPU reference path for the ZNVDS interchange format; it is
   not a neural decoder and does not execute tiny-cuda-nn.
 
