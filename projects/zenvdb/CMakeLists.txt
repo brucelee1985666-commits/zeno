@@ -18,20 +18,28 @@ endif()
 # FUN FACT: DID U KNOW THAT MICROSOFT BUYS GITHUB? #
 ####################################################
 
+option(ZENO_SYSTEM_OPENVDB "Use OpenVDB found in system instead of submodule" OFF)
+
 target_sources(zeno PRIVATE ${PROJECT_SOURCE})
 target_include_directories(zeno PRIVATE ../oldzenbase/include)
 
-# NanoVDB is optional when building against a system OpenVDB installation.
-# The conversion/dataset nodes are compiled only when its public headers are available.
-find_path(ZENO_NANOVDB_INCLUDE_DIR
-    nanovdb/NanoVDB.h
-    HINTS ${CMAKE_CURRENT_SOURCE_DIR}/openvdb/nanovdb
-)
+# Never mix NanoVDB headers from the vendored OpenVDB revision with a different
+# system OpenVDB ABI. Resolve both from the same installation/source tree.
+if (ZENO_SYSTEM_OPENVDB)
+    find_path(ZENO_NANOVDB_INCLUDE_DIR nanovdb/NanoVDB.h)
+else()
+    set(ZENO_NANOVDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/openvdb/nanovdb)
+    if (NOT EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/NanoVDB.h")
+        set(ZENO_NANOVDB_INCLUDE_DIR "")
+    endif()
+endif()
+
+# NanoVDB utility nodes remain optional if matching headers are unavailable.
 if (ZENO_NANOVDB_INCLUDE_DIR)
     target_include_directories(zeno PRIVATE ${ZENO_NANOVDB_INCLUDE_DIR})
 else()
     list(FILTER PROJECT_SOURCE EXCLUDE REGEX "(OpenVDBToNanoVDB|ExportNeuralVolumeDataset)\\.cpp$")
-    message(STATUS "NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
+    message(STATUS "Matching NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
 endif()
 
 target_include_directories(zeno PUBLIC
@@ -57,7 +65,6 @@ find_package(TBB REQUIRED COMPONENTS tbb tbbmalloc)
 message(STATUS "Found TBB ${TBB_VERSION}")
 target_link_libraries(zeno PRIVATE TBB::tbbmalloc TBB::tbb)
 
-option(ZENO_SYSTEM_OPENVDB "Use OpenVDB found in system instead of submodule" OFF)
 if (ZENO_SYSTEM_OPENVDB)
     find_package(OpenVDB REQUIRED)
     message(STATUS "Found OpenVDB ${OpenVDB_VERSION}")
