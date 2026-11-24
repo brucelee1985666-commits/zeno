@@ -29,21 +29,21 @@ For each requested leaf the decoder:
 4. Runs the value regressor only for predicted active voxels, if that domain
    has one, then restores values using the stored center and scale.
 5. Applies exact occupancy flips and exact-value corrections from the ZNVM.
-6. Returns one `DecodedNeuralLeaf` with 512 occupancy flags and values.
+6. The CPU convenience API returns one `DecodedNeuralLeaf` with 512 occupancy flags and values. For a device-resident result, use `decodeLeafDevice()` below.
 
 A domain without a regressor must provide exact values for every active voxel;
 the decoder checks this rather than silently returning background values.
 
 ## Scope and validation boundary
 
-This is lazy GPU neural inference with one-leaf CPU output. It avoids
-reconstructing the entire volume as a CPU OpenVDB grid, but it is not yet a
+The legacy `decodeLeaf()` convenience API returns one leaf on the CPU. The
+new `decodeLeafDevice()` path keeps the decoded leaf on the GPU and avoids
+reconstructing the full volume as a CPU OpenVDB grid. Neither path is yet a
 direct NanoVDB GPU-grid writer, a ZenoCompute device object, or a renderer node.
-The caller receives decoded leaf arrays on the CPU and can inspect the original
-source metadata, affine transform, and preserved active tiles through
-`sourceModel()`. A subsequent integration must stream these leaf results into
-a GPU-resident NanoVDB/volume representation without expanding the full tree
-on the host. A decoder instance is not thread-safe because it maintains one
+The caller can inspect the original source metadata, affine transform, and
+preserved active tiles through `sourceModel()`. A subsequent integration must
+stream these device leaves into a GPU-resident NanoVDB/volume representation
+without expanding the full tree on the host. A decoder instance is not thread-safe because it maintains one
 active domain runtime; serialize calls per instance or use one instance per
 worker.
 
