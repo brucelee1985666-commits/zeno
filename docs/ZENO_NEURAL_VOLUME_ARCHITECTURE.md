@@ -178,9 +178,8 @@ Não declarar vitória por razão de compressão isolada: NeuralVDB prioriza foo
 A implementação agora contém um caminho funcional em código para recriar redes
 tiny-cuda-nn a partir da configuração e dos parâmetros ZNVM, fazer inferência
 por lotes, decodificar leaves seletivamente e produzir um NanoVDB FloatGrid
-residente na GPU com topologia nativa de leaves e tiles internos. O decoder
-mantém apenas o domínio neural atualmente usado na GPU para limitar VRAM; a
-troca de domínio recria e reenvia os pesos. O caminho de construção NanoVDB
+residente na GPU com topologia nativa de leaves e tiles internos. O decoder mantém uma cache LRU limitada a dois domínios para evitar uploads
+repetidos ao atravessar fronteiras próximas, mantendo o uso de VRAM limitado. O caminho de construção NanoVDB
 ainda consulta a ocupação das leaves na CPU para montar a topologia, enquanto
 os valores escalares são mantidos em buffers GPU.
 
@@ -206,7 +205,7 @@ os valores escalares são mantidos em buffers GPU.
 - O caminho NanoVDB reconstrói a topologia no host e copia máscaras de
   ocupação leaf a leaf. É um primeiro bridge híbrido, não uma atualização
   totalmente GPU-resident nem um caminho otimizado para streaming de frames.
-- A cache de redes é de um domínio ativo por decoder; chamadas concorrentes
+- A cache de redes mantém até dois domínios por decoder; chamadas concorrentes
   precisam ser serializadas por instância.
 - O formato e o runtime continuam restritos a FloatGrid e ao backend/
   configuração tiny-cuda-nn gravados no checkpoint.
