@@ -97,7 +97,7 @@ jobs:
             -DZENO_WITH_CUDA=OFF \
             -DZENO_USE_CCACHE=OFF \
             -DZENO_ENABLE_OPENMP=OFF \
-            -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/projects/zenvdb/openvdb/cmake"
+            -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/tools/neural_volume/openvdb_roundtrip;$GITHUB_WORKSPACE/projects/zenvdb/openvdb/cmake"
       - name: Build Zeno and node integration executables
         run: |
           cmake --build build-zeno-node-runtime \
