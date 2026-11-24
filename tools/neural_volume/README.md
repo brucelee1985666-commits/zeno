@@ -29,7 +29,35 @@ This folder contains the first offline neural-compression experiment for Zeno.
    python tools/neural_volume/train_znvds.py input.znvds output.znvm
    ```
 
-Validate the output container with:\n\n```bash\npython tools/neural_volume/inspect_znvm.py output.znvm\n```\n\n## First-pass model
+Validate the output container with:
+
+```bash
+python tools/neural_volume/inspect_znvm.py output.znvm
+```
+
+## GPU-free validation path
+
+You do not need an NVIDIA GPU to validate an exported `.znvds` dataset:
+
+```bash
+python tools/neural_volume/inspect_znvds.py input.znvds --domain-size 128
+```
+
+The standard-library CPU audit checks finite values, unique/aligned leaf origins,
+occupancy/value consistency, domain assignment (including negative coordinates),
+active samples on domain boundary planes, and a SHA-256 digest of the ordered
+active coordinate/value records. It does not train or execute a neural network.
+
+CI also builds a small FloatGrid with NanoVDB's upstream CPU `GridBuilder`,
+converts it with `createNanoGrid`, and checks active leaf values and an active
+tile on the CPU. This verifies the upstream NanoVDB CPU data path, not the
+tiny-cuda-nn inference path.
+
+The tiny-cuda-nn trainer remains optional and NVIDIA-only. If no compatible GPU
+is available, use the CPU audit and CPU NanoVDB tests; do not substitute a
+CPU mock and call it a neural training/inference result.
+
+## First-pass model
 
 - Domain size: 128³ voxels by default.
 - Per-domain occupancy classifier: tiny-cuda-nn HashGrid + CutlassMLP.
