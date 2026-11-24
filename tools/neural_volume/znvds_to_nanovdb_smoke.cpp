@@ -23,7 +23,7 @@ void writeFixture(const std::filesystem::path& p) {
     const std::string name="znvds-roundtrip"; u32(o,static_cast<uint32_t>(name.size())); o.write(name.data(),name.size());
     u32(o,2); f32(o,0.0f); f32(o,0.5f); f32(o,1.0f); f32(o,1.5f);
     // Non-uniform scale plus translation, row-major index-to-world affine.
-    const double m[16]={2,0,0,10, 0,3,0,-4, 0,0,4,7, 0,0,0,1};
+    const double m[16]={2,0,0,0, 0,3,0,0, 0,0,4,0, 10,-4,7,1};
     for(double v:m) f64(o,v);
     // Level-1 active tile (origin must align to the tile's 8-voxel extent).
     i32(o,64); i32(o,0); i32(o,0); u32(o,1); f32(o,2.5f);
