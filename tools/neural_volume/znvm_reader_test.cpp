@@ -32,7 +32,7 @@ void string(std::ostream& out, const std::string& value) {
 }
 
 std::string fixture(bool partial, bool trailing) {
-    std::ostringstream out(std::ios::binary);
+    std::ostringstream out(std::ios::out | std::ios::binary);
     out.write("ZNVM0001", 8);
     u32(out, 1); u32(out, partial ? 7 : 3);
     char hash[32]{}; out.write(hash, sizeof(hash));
