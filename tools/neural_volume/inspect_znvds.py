@@ -188,7 +188,7 @@ def inspect_dataset(path: str | Path, domain_size: int = 128) -> dict:
                 {"key": list(key), "active_voxels": count}
                 for key, count in sorted(domain_active_voxels.items())
             ],
-            "active_coordinate_value_sha256": active_digest.hexdigest(),
+            "active_record_stream_sha256": active_digest.hexdigest(),
             "validation": "ok",
         },
         "validation": "ok",
