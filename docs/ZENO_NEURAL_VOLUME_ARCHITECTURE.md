@@ -122,6 +122,16 @@ A saída `.znvm` agora é um contêiner binário little-endian com parâmetros t
 
 Dependências do treinamento: Python, NumPy, PyTorch com CUDA e tiny-cuda-nn instalado conforme as instruções upstream. A extensão tiny-cuda-nn exige GPU NVIDIA e não oferece fallback CPU. O treinamento real não foi executado nesta etapa porque não há uma GPU de execução disponível nesta sessão.
 
+### Gate 2B — leitor C++ do contêiner ZNVM (implementado e compilado em CI)
+
+Foi adicionado `projects/zenvdb/NeuralVolumeModel.h/.cpp`:
+- lê o cabeçalho versionado, hash da origem, metadados espaciais e configuração do modelo;
+- carrega parâmetros do classificador/regressor, tiles explícitos e correções por leaf;
+- valida limites de tamanho, contagens, flags, transform, offsets e bytes excedentes;
+- não depende de tiny-cuda-nn para ler/validar o contêiner.
+
+O teste C++ `tools/neural_volume/znvm_reader_test.cpp` compila e executa em CI, cobrindo arquivo completo, arquivo parcial e rejeição de bytes excedentes. Isso valida o leitor binário com fixtures sintéticas; ainda não valida arquivos produzidos por uma sessão real de treinamento nem a inferência CUDA.
+
 ## Auditoria inicial dos backends neurais
 
 - tiny-cuda-nn é usado agora como backend experimental do treinador Python para HashGrid + CutlassMLP; ele não fornece a hierarquia VDB nem a garantia de topologia lossless. O upstream atual pede CMake 3.18+ para seu build C++ e a extensão Python depende de PyTorch com CUDA. Por isso, não foi adicionado como submódulo nem como dependência obrigatória do runtime Zeno.
