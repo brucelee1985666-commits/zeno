@@ -57,7 +57,7 @@ jobs:
       - name: Compile CUDA neural volume bridge (compile-only, no GPU required)
         run: |
           nvcc --version
-          nvcc -std=c++17 -arch=sm_75 --expt-relaxed-constexpr -Xcompiler=-fPIC \
+          nvcc -std=c++17 -arch=sm_75 --expt-relaxed-constexpr --extended-lambda -Xcompiler=-fPIC \
             -DZENO_WITH_TINY_CUDA_NN=1 \
             -DZENO_WITH_NANOVDB_CUDA_BUILDERS=1 \
             -DTCNN_MIN_GPU_ARCH=75 \
