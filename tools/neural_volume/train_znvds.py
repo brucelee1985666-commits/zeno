@@ -143,7 +143,12 @@ def make_model(seed: int, output_dims: int = 1):
     ).cuda()
     if tcnn.supports_jit_fusion():
         model.jit_fusion = True
-    return model, {"encoding": encoding, "network": network}
+    return model, {
+        "backend": "tiny-cuda-nn",
+        "upstream_commit": "3daa6e5b8b8e0fa17971a1a20acfbb3754494b38",
+        "encoding": encoding,
+        "network": network,
+    }
 
 
 def train_model(model, inputs, targets, steps, batch_size, learning_rate, kind):
