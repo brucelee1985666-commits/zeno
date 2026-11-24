@@ -734,9 +734,19 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
     for (const auto& tile : model.activeTiles) {
         const nanovdb::Coord coord(tile.coord[0], tile.coord[1], tile.coord[2]);
         switch (tile.level) {
-        case 1: indexBuilder.root().template addTile<1>(coord, 1u, true); break;
-        case 2: indexBuilder.root().template addTile<2>(coord, 1u, true); break;
-        case 3: indexBuilder.root().template addTile<3>(coord, 1u, true); break;
+        case 1:
+            // Materialize the empty parent path first. Otherwise GridBuilder's
+            // deep addTile path inherits the new tile's value into sibling slots.
+            indexBuilder.getAccessor().touchLeaf(coord);
+            indexBuilder.root().template addTile<1>(coord, 1u, true);
+            break;
+        case 2:
+            indexBuilder.getAccessor().touchLeaf(coord);
+            indexBuilder.root().template addTile<2>(coord, 1u, true);
+            break;
+        case 3:
+            indexBuilder.root().template addTile<3>(coord, 1u, true);
+            break;
         default: throw std::runtime_error("ZNVM active tile level is outside NanoVDB's supported tree levels 1..3");
         }
     }

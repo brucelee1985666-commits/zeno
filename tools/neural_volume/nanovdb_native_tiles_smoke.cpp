@@ -15,13 +15,17 @@ int main() {
     GridT source(1u, "native-active-tile-smoke");
     const std::array<nanovdb::Coord, 4> probes{
         nanovdb::Coord(0, 0, 0),       // active leaf voxel
-        nanovdb::Coord(64, 0, 0),      // level-1 tile
-        nanovdb::Coord(256, 0, 0),     // level-2 tile
-        nanovdb::Coord(4096, 0, 0)     // level-3/root tile
+        nanovdb::Coord(8192, 0, 0),    // level-1 tile
+        nanovdb::Coord(12288, 0, 0),  // level-2 tile
+        nanovdb::Coord(16384, 0, 0)  // level-3/root tile
     };
 
     source.setValue(probes[0], 1u);
+    // Exercise isolated branches: no existing leaf creates the parent nodes
+    // for either internal tile.
+    source.getAccessor().touchLeaf(probes[1]);
     source.root().template addTile<1>(probes[1], 1u, true);
+    source.getAccessor().touchLeaf(probes[2]);
     source.root().template addTile<2>(probes[2], 1u, true);
     source.root().template addTile<3>(probes[3], 1u, true);
 
@@ -29,12 +33,13 @@ int main() {
     const auto* indexGrid = hostHandle.grid<BuildT>();
     if (!indexGrid) throw std::runtime_error("CreateNanoGrid returned no ValueOnIndex grid");
 
-    std::cerr << "valueCount=" << indexGrid->valueCount() << "\\n";
+    if (indexGrid->valueCount() != probes.size() + 1) {
+        throw std::runtime_error("ValueOnIndex count did not include background, leaf voxel, and all three active tiles");
+    }
     auto accessor = indexGrid->getAccessor();
     std::array<uint32_t, probes.size()> indices{};
     for (size_t i = 0; i < probes.size(); ++i) {
         indices[i] = accessor.getValue(probes[i]);
-        std::cerr << "probe[" << i << "] index=" << indices[i] << "\\n";
         if (indices[i] == 0) {
             throw std::runtime_error("active leaf or tile was omitted from the ValueOnIndex topology");
         }
