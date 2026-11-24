@@ -64,7 +64,7 @@ class ZNVDSInspectionTests(unittest.TestCase):
             self.assertEqual(audit["negative_domain_count"], 1)
             self.assertEqual(audit["active_voxels_on_domain_boundary_planes"], 2)
             self.assertEqual(audit["active_voxels_by_domain"][0]["key"], [-1, 0, 0])
-            self.assertEqual(len(audit["active_coordinate_value_sha256"]), 64)
+            self.assertEqual(len(audit["active_record_stream_sha256"]), 64)
 
     def test_rejects_non_finite_active_values(self):
         with tempfile.TemporaryDirectory() as tmp:
