@@ -293,6 +293,112 @@ def encode_domain(key, leaves, args):
     }
 
 
+def write_u16(stream, value):
+    stream.write(struct.pack("<H", int(value)))
+
+
+def write_u32(stream, value):
+    stream.write(struct.pack("<I", int(value)))
+
+
+def write_u64(stream, value):
+    stream.write(struct.pack("<Q", int(value)))
+
+
+def write_i32(stream, value):
+    stream.write(struct.pack("<i", int(value)))
+
+
+def write_f32(stream, value):
+    stream.write(struct.pack("<f", float(value)))
+
+
+def write_f64(stream, value):
+    stream.write(struct.pack("<d", float(value)))
+
+
+def write_string(stream, value):
+    encoded = value.encode("utf-8")
+    write_u32(stream, len(encoded))
+    stream.write(encoded)
+
+
+def write_params(stream, params):
+    array = params.detach().float().cpu().contiguous().numpy().astype("<f4", copy=False)
+    write_u64(stream, array.size)
+    array.tofile(stream)
+
+
+def write_znvm(path, metadata, tiles, domains, args, source_hash, partial, model_config):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as stream:
+        stream.write(b"ZNVM0001")
+        write_u32(stream, 1)
+        write_u32(stream, 7 if partial else 3)  # FloatGrid + affine + optional partial-domain flag
+        stream.write(bytes.fromhex(source_hash))
+        write_string(stream, metadata["grid_name"])
+        write_u32(stream, metadata["grid_class"])
+        write_f32(stream, metadata["background"])
+        for value in metadata["voxel_size"]:
+            write_f32(stream, value)
+        for value in metadata["index_to_world_affine_row_major"]:
+            write_f64(stream, value)
+        write_u32(stream, args.domain_size)
+        write_u32(stream, args.steps)
+        write_u32(stream, args.batch_size)
+        write_f32(stream, args.learning_rate)
+        write_f32(stream, args.value_tolerance)
+        write_string(stream, json.dumps(model_config, sort_keys=True, separators=(",", ":")))
+        write_u64(stream, len(tiles))
+        write_u64(stream, len(domains))
+        write_u64(stream, metadata["leaf_blocks"])
+        write_u64(stream, metadata["active_voxels"])
+
+        for tile in tiles:
+            for value in tile["coord"]:
+                write_i32(stream, value)
+            write_u32(stream, tile["level"])
+            write_f32(stream, tile["value"])
+
+        for domain in domains:
+            for value in domain["domain_key"]:
+                write_i32(stream, value)
+            for value in domain["domain_origin"]:
+                write_i32(stream, value)
+            write_params(stream, domain["classifier"]["params"])
+
+            regressor = domain["regressor"]
+            write_u32(stream, 1 if regressor is not None else 0)
+            if regressor is not None:
+                write_f32(stream, regressor["center"])
+                write_f32(stream, regressor["scale"])
+                write_params(stream, regressor["params"])
+
+            metrics = domain["metrics"]
+            for key in (
+                "classifier_accuracy", "occupancy_iou", "occupancy_precision",
+                "occupancy_recall", "value_rmse_before_corrections"
+            ):
+                value = metrics[key]
+                write_f32(stream, -1.0 if value is None else value)
+            write_u32(stream, metrics["occupancy_corrections"])
+            write_u32(stream, metrics["value_corrections"])
+
+            write_u32(stream, len(domain["leaves"]))
+            for leaf in domain["leaves"]:
+                for value in leaf["origin"]:
+                    write_i32(stream, value)
+                occupancy = leaf["occupancy_corrections"]
+                write_u32(stream, len(occupancy))
+                for offset in occupancy:
+                    write_u16(stream, offset)
+                value_corrections = leaf["value_corrections"]
+                write_u32(stream, len(value_corrections))
+                for offset, value in value_corrections:
+                    write_u16(stream, offset)
+                    write_f32(stream, value)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -343,31 +449,14 @@ def main():
             "metrics": payload["metrics"],
         }))
 
-    checkpoint = {
-        "format": "ZNVM",
-        "version": 1,
-        "source_dataset_sha256": sha256_file(args.dataset),
-        "source_metadata": metadata,
-        "domain_size_voxels": args.domain_size,
-        "tiles_exact": tiles,
-        "domains": encoded,
-        "training": {
-            "steps": args.steps,
-            "batch_size": args.batch_size,
-            "learning_rate": args.learning_rate,
-            "value_tolerance": args.value_tolerance,
-            "backend": "tiny-cuda-nn HashGrid + CutlassMLP",
-        },
-        "warning": (
-            "Prototype checkpoint. Occupancy corrections assume the same tiny-cuda-nn "
-            "inference configuration and numerical behavior. No C++ decoder is included yet."
-        ),
-    }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(checkpoint, args.output)
+    partial = len(ordered_keys) != len(domains)
+    model_config = encoded[0]["classifier"]["config"]
+    source_hash = sha256_file(args.dataset)
+    write_znvm(args.output, metadata, tiles, encoded, args, source_hash, partial, model_config)
     print(json.dumps({
         "output": str(args.output),
         "domains_encoded": len(encoded),
+        "partial_checkpoint": partial,
         "checkpoint_bytes": args.output.stat().st_size,
         "source_dataset_bytes": args.dataset.stat().st_size,
         "status": "checkpoint_written",
