@@ -19,7 +19,7 @@ int main() {
     source.setValue(b, 0.75f);
     source.root().template addTile<1>(tileOrigin, 2.5f, true);
 
-    auto handle = nanovdb::tools::createNanoGrid(source, 0u, false, true, 0);
+    auto handle = nanovdb::tools::createNanoGrid(source);
     const auto* grid = handle.grid<float>();
     if (!grid) throw std::runtime_error("CPU NanoVDB builder returned no FloatGrid");
 
