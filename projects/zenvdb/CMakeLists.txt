@@ -56,23 +56,40 @@ if (ZENO_WITH_TINY_CUDA_NN)
         message(FATAL_ERROR
             "ZENO_WITH_TINY_CUDA_NN requires the tiny-cuda-nn target to be provided by the parent build")
     endif()
-    target_sources(zeno PRIVATE TinyCudaNNRuntime.cu)
-    target_link_libraries(zeno PRIVATE tiny-cuda-nn)
-    set_target_properties(zeno PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
-    target_compile_definitions(zeno PRIVATE ZENO_WITH_TINY_CUDA_NN=1)
 
-    # Use the upstream NanoVDB GPU builders when this OpenVDB/NanoVDB revision
-    # provides them. Older vendored revisions keep the neural decoder available
-    # but compile a clear runtime-unavailable fallback for the NanoVDB bridge.
-    if (ZENO_NANOVDB_INCLUDE_DIR
-        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/PointsToGrid.cuh"
-        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/IndexToGrid.cuh"
-        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/cuda/GridHandle.cuh"
-        AND EXISTS "${ZENO_NANOVDB_INCLUDE_DIR}/nanovdb/tools/cuda/GridChecksum.cuh")
-        target_compile_definitions(zeno PRIVATE ZENO_WITH_NANOVDB_CUDA_BUILDERS=1)
-        message(STATUS "NanoVDB CUDA PointsToGrid + IndexToGrid bridge enabled")
+    target_link_libraries(zeno PRIVATE tiny-cuda-nn)
+    target_compile_definitions(zeno PRIVATE ZENO_WITH_TINY_CUDA_NN=1)
+    set_target_properties(zeno PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
+
+    # Keep the legacy OpenVDB submodule intact. Compile the neural bridge in
+    # isolation against a separately pinned upstream NanoVDB header tree.
+    set(ZENO_NANOVDB_CUDA_INCLUDE_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream/nanovdb"
+        CACHE PATH "NanoVDB upstream include root (contains nanovdb/NanoVDB.h)")
+
+    if (EXISTS "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}/nanovdb/NanoVDB.h"
+        AND EXISTS "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}/nanovdb/tools/GridBuilder.h"
+        AND EXISTS "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}/nanovdb/tools/CreateNanoGrid.h"
+        AND EXISTS "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}/nanovdb/tools/cuda/IndexToGrid.cuh"
+        AND EXISTS "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}/nanovdb/cuda/HandleStorage.h"
+        AND EXISTS "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}/nanovdb/cuda/GridHandle.cuh"
+        AND EXISTS "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}/nanovdb/tools/cuda/GridChecksum.cuh")
+        add_library(zeno_neuralvolume_cuda OBJECT TinyCudaNNRuntime.cu)
+        target_include_directories(zeno_neuralvolume_cuda PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+            "${ZENO_NANOVDB_CUDA_INCLUDE_DIR}")
+        target_link_libraries(zeno_neuralvolume_cuda PRIVATE tiny-cuda-nn)
+        target_compile_definitions(zeno_neuralvolume_cuda PRIVATE
+            ZENO_WITH_TINY_CUDA_NN=1
+            ZENO_WITH_NANOVDB_CUDA_BUILDERS=1)
+        set_target_properties(zeno_neuralvolume_cuda PROPERTIES
+            CUDA_STANDARD 17
+            CUDA_STANDARD_REQUIRED ON)
+        target_sources(zeno PRIVATE $<TARGET_OBJECTS:zeno_neuralvolume_cuda>)
+        message(STATUS "Native-tile NanoVDB bridge enabled with pinned upstream GridBuilder + IndexToGrid")
     else()
-        message(STATUS "NanoVDB CUDA builders unavailable in this header set; device grid bridge will report unavailable")
+        target_sources(zeno PRIVATE TinyCudaNNRuntime.cu)
+        message(STATUS "Upstream NanoVDB headers unavailable; neural leaf decoder enabled without NanoVDB grid conversion")
     endif()
 endif()
 

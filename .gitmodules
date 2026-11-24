@@ -34,3 +34,6 @@
 [submodule "projects/CUDA/projects/CUDA/zpc_jit"]
 	path = projects/CUDA/zpc_jit
 	url = https://github.com/zenustech/POC_zpc_jit.git
+[submodule "projects/zenvdb/nanovdb-upstream"]
+	path = projects/zenvdb/nanovdb-upstream
+	url = https://github.com/AcademySoftwareFoundation/openvdb.git

@@ -63,24 +63,63 @@ The optional CUDA API also exposes `NeuralVolumeDecoder::decodeLeafDevice()`. It
 Classifier and regressor predictions are written directly to device buffers. The regressor evaluates all 512 leaf positions to avoid reading a variable active count back to the CPU. A final CUDA kernel applies occupancy flips and exact-value corrections and writes the final leaf arrays on the GPU. The leaf owner also retains intermediate buffers until destruction, so the returned CUDA stream can be consumed asynchronously. Only the small correction lists and normalized coordinates cross from host to device; the predicted occupancy/value arrays are never downloaded. This is a device-leaf API, not yet a NanoVDB grid writer or a ZenoCompute node. CUDA compilation and execution still require a CUDA-capable build with the pinned tiny-cuda-nn dependency and have not been validated by the CPU-only workflow.
 
 
-## GPU NanoVDB bridge
+## GPU NanoVDB bridge with native tiles
 
-`NeuralVolumeDecoder::buildNanoVDBDevice()` decodes the complete set of ZNVM leaf records one leaf at a time and builds a real device-resident `nanovdb::NanoGrid<float>`. It reuses NanoVDB's own CUDA `PointsToGrid<ValueOnIndex>` and `IndexToGrid<float>` builders:
+`NeuralVolumeDecoder::buildNanoVDBDevice()` builds a device-resident
+`nanovdb::NanoGrid<float>` with the original active leaf occupancy and active
+internal tiles represented in the native NanoVDB tree.
 
-1. Each decoded leaf is appended into GPU arrays of active index-space coordinates and their float values. The append kernel uses the leaf's exact occupancy and corrected values.
-2. The append counter is checked against the ZNVM source active-voxel count before topology construction.
-3. NanoVDB's CUDA PointsToGrid creates a sparse `ValueOnIndex` tree directly on the GPU.
-4. A CUDA scatter kernel maps each coordinate into NanoVDB's assigned active index and fills the value sidecar; IndexToGrid bakes that sidecar into a `FloatGrid` on the GPU.
-5. The original affine index-to-world transform and grid name are passed into the builder. The grid class and checksum are finalized before the handle is returned.
+1. Each neural leaf is decoded on the GPU. Only its 512-byte occupancy mask is
+   copied to the CPU to construct sparse topology; the 512 float values remain
+   on the GPU.
+2. The CPU-side NanoVDB `GridBuilder<ValueOnIndex>` creates active leaf entries
+   and inserts each active tile at its recorded tree level (1, 2, or 3).
+3. `CreateNanoGrid` serializes that sparse index topology. The index grid is
+   uploaded to the GPU using NanoVDB's `cuda::copyTo`.
+4. CUDA kernels map each decoded leaf coordinate and each active tile
+   coordinate to its `ValueOnIndex` slot. Neural leaf values and original tile
+   values are written into a GPU sidecar.
+5. NanoVDB's upstream `IndexToGrid<float>` converts the indexed topology and
+   sidecar into a FloatGrid on the GPU. The affine transform, grid name, grid
+   class, and checksum are preserved/finalized.
 
-The returned move-only `NanoVDBDeviceGrid` owns the NanoVDB device buffer. Keep it alive while using `gridDevice()`; the returned pointer is an opaque device pointer to `nanovdb::NanoGrid<float>`. `bufferSize()`, `activeVoxelCount()`, and `wait()` expose storage size, topology count, and completion. Original active internal tile records are also uploaded as a device sidecar, accessible through `sourceActiveTilesDevice()` and `sourceActiveTileCount()`. No complete OpenVDB grid or full voxel array is materialized on the CPU; only scalar counters and NanoVDB's small internal builder metadata cross to the host.
+The returned move-only `NanoVDBDeviceGrid` owns the device buffer. Keep it alive
+while using `gridDevice()`; the pointer is an opaque device pointer to
+`nanovdb::NanoGrid<float>`. `bufferSize()`, `activeVoxelCount()`,
+`sourceActiveTileCount()`, and `wait()` expose storage size, leaf voxel
+count, original active tile count, and completion. Active tiles are no longer
+exposed as a separate sidecar: they are part of the NanoVDB tree itself.
 
-CMake enables this bridge only when `ZENO_WITH_TINY_CUDA_NN=ON` and the selected NanoVDB headers contain both `nanovdb/tools/cuda/PointsToGrid.cuh` and `nanovdb/tools/cuda/IndexToGrid.cuh`. Older NanoVDB revisions still compile the neural runtime but the bridge method reports that the GPU builders are unavailable. This feature-detection is intentional: do not silently mix headers from a different NanoVDB/OpenVDB revision.
+The topology builder performs CPU work proportional to active leaf voxels and
+tiles, but it does not reconstruct a CPU float volume or an OpenVDB grid. This
+is deliberate: upstream NanoVDB's current `MergeGrids` CUDA operator rejects
+inputs containing value tiles, so it is not used for this operation.
 
-**Current topology boundary:** this first bridge builds all leaf-level active voxels into one sparse NanoVDB FloatGrid. Active internal tiles recorded in `model.activeTiles` are uploaded as a separate GPU sidecar and reported by `sourceActiveTileCount()`, but they are not yet inserted as NanoVDB internal tree tiles. A model containing only active tiles and no active leaf voxels is therefore rejected. This is not yet a complete topology round-trip for tile-heavy grids. The CUDA path has not been compiled or executed on a GPU in this environment; the existing CPU-only CI does not validate it.
+### Pinned NanoVDB headers
 
+The legacy `projects/zenvdb/openvdb` submodule remains unchanged. A separate
+optional submodule, `projects/zenvdb/nanovdb-upstream`, pins the official
+`AcademySoftwareFoundation/openvdb` revision
+`f28614d90ce02736865e5db1da10b931f78e67a3`. This avoids mixing legacy
+OpenVDB headers with modern NanoVDB CUDA builder headers in the same
+translation unit. Initialize submodules recursively before enabling
+`ZENO_WITH_TINY_CUDA_NN`. CMake compiles the neural CUDA bridge as a separate
+object target with only the pinned upstream NanoVDB include root. If that
+submodule is absent, the neural leaf decoder can still be built, but the
+NanoVDB conversion method reports that the required headers are unavailable.
 
-Minimal C++ usage (inside a CUDA-enabled consumer):
+### Validation boundary
+
+The source update does not constitute a CUDA build. The new path still
+requires compilation with the project's CUDA toolkit, tiny-cuda-nn, and the
+pinned NanoVDB headers, followed by GPU tests containing leaf voxels and active
+tiles at levels 1, 2, and 3. CPU-only CI cannot establish CUDA compilation or
+runtime correctness. The code now constructs native tile topology, but a
+compiled GPU round-trip is still required before claiming validated output.
+Tile-only checkpoints are still rejected because upstream `IndexToGrid` has
+a zero-leaf launch path that must be handled separately.
+
+Minimal C++ usage:
 
 ```cpp
 #include <zeno/TinyCudaNNRuntime.h>
@@ -91,8 +130,8 @@ auto model = readZNVMFile(checkpointPath);
 NeuralVolumeDecoder decoder(std::move(model));
 auto deviceGrid = decoder.buildNanoVDBDevice();
 auto* grid = static_cast<const nanovdb::NanoGrid<float>*>(deviceGrid.gridDevice());
-auto* sourceTiles = static_cast<const ActiveTile*>(deviceGrid.sourceActiveTilesDevice());
-// Keep deviceGrid alive while grid/sourceTiles are used by CUDA kernels.
+// Keep deviceGrid alive while grid is used by CUDA kernels.
 ```
 
-This API currently returns a device-only grid handle; it does not write a `.nvdb` file or register a Zeno graph node. Those are separate integration tasks. Copying the full grid to host solely to serialize it would defeat the current device-resident path.
+The API returns a device-only grid handle; it does not write a `.nvdb` file or
+register a Zeno graph node. Those are separate integration tasks.

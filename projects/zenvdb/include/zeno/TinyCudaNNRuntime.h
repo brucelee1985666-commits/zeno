@@ -39,8 +39,6 @@ public:
     size_t bufferSize() const;
     uint64_t activeVoxelCount() const;
     uint64_t sourceActiveTileCount() const;
-    // Device sidecar of source active internal tiles; not yet inserted as tree tiles.
-    const void* sourceActiveTilesDevice() const;
     void wait() const;
 private:
     struct Impl;
@@ -82,9 +80,7 @@ public:
     bool hasLeaf(const std::array<int32_t, 3>& leafOrigin) const;
     DecodedNeuralLeaf decodeLeaf(const std::array<int32_t, 3>& leafOrigin);
     DecodedNeuralLeafDevice decodeLeafDevice(const std::array<int32_t, 3>& leafOrigin);
-    // Builds one device-resident NanoVDB FloatGrid from all neural leaf records.
-    // The original active internal tiles remain available through sourceModel();
-    // this first bridge currently builds the leaf-voxel topology only.
+    // Builds one device-resident NanoVDB FloatGrid with native leaf and active-tile topology.
     NanoVDBDeviceGrid buildNanoVDBDevice();
 private:
     struct Impl;
