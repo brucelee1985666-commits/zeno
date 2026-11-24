@@ -11,6 +11,10 @@ set(OPENVDB_BUILD_PYTHON_MODULE OFF CACHE BOOL "" FORCE)
 set(OPENVDB_BUILD_NANOVDB OFF CACHE BOOL "" FORCE)
 set(OPENVDB_BUILD_CORE ON CACHE BOOL "" FORCE)
 set(USE_NANOVDB OFF CACHE BOOL "" FORCE)
+# The fixture never writes .vdb compression streams. Disable legacy vendored
+# Blosc/ZLIB here to avoid rebuilding old bundled C code with newer CI compilers.
+set(USE_BLOSC OFF CACHE BOOL "" FORCE)
+set(USE_ZLIB OFF CACHE BOOL "" FORCE)
 set(USE_EXR OFF CACHE BOOL "" FORCE)
 set(USE_IMATH_HALF OFF CACHE BOOL "" FORCE)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
