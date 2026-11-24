@@ -71,6 +71,7 @@ def inspect_dataset(path: str | Path) -> dict:
 
         name_size = _u32(stream, "grid-name size")
         name = _read_exact(stream, name_size, "grid name").decode("utf-8")
+        grid_class = _u32(stream, "grid class")
         background = _f32(stream, "background")
         voxel_size = [_f32(stream, f"voxel size[{i}]") for i in range(3)]
         affine_transform = [
@@ -81,14 +82,12 @@ def inspect_dataset(path: str | Path) -> dict:
         if any(not math.isfinite(v) for v in affine_transform):
             raise DatasetError("affine transform contains non-finite values")
 
-        tiles = []
         for index in range(tile_count):
             coord = [_i32(stream, f"tile[{index}] coordinate") for _ in range(3)]
             level = _u32(stream, f"tile[{index}] level")
             value = _f32(stream, f"tile[{index}] value")
             if level == 0:
                 raise DatasetError(f"tile[{index}] has leaf level 0")
-            tiles.append((coord, level, value))
 
         observed_active = 0
         for block_index in range(leaf_count):
@@ -137,6 +136,7 @@ def inspect_dataset(path: str | Path) -> dict:
         "format": "ZNVDS",
         "version": version,
         "grid_name": name,
+        "grid_class": grid_class,
         "background": background,
         "voxel_size": voxel_size,
         "index_to_world_affine_row_major": affine_transform,
