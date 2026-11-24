@@ -202,7 +202,10 @@ def encode_domain(key, leaves, args):
     x_occ = torch.as_tensor(np.asarray(coords, dtype=np.float32), device="cuda")
     y_occ = torch.as_tensor(np.asarray(occupancy, dtype=np.float32).reshape(-1, 1), device="cuda")
 
-    classifier, classifier_config = make_model(args.seed + abs(hash(key)) % 100000)
+    domain_seed = args.seed + (
+        key[0] * 73856093 ^ key[1] * 19349663 ^ key[2] * 83492791
+    ) % 100000
+    classifier, classifier_config = make_model(domain_seed)
     train_model(classifier, x_occ, y_occ, args.steps, args.batch_size, args.learning_rate, "classifier")
     logits = infer(classifier, x_occ)
     predicted = (logits[:, 0] >= 0.0).to(torch.uint8).cpu().numpy()
@@ -214,6 +217,12 @@ def encode_domain(key, leaves, args):
         occupancy_corrections.append(mismatch.tolist())
 
     classifier_accuracy = float((predicted == target).mean())
+    true_positive = int(np.logical_and(predicted == 1, target == 1).sum())
+    false_positive = int(np.logical_and(predicted == 1, target == 0).sum())
+    false_negative = int(np.logical_and(predicted == 0, target == 1).sum())
+    occupancy_iou = true_positive / max(1, true_positive + false_positive + false_negative)
+    occupancy_precision = true_positive / max(1, true_positive + false_positive)
+    occupancy_recall = true_positive / max(1, true_positive + false_negative)
 
     regressor_payload = None
     value_corrections = [[] for _ in leaves]
@@ -225,7 +234,7 @@ def encode_domain(key, leaves, args):
         x_val = torch.as_tensor(np.asarray(value_coords, dtype=np.float32), device="cuda")
         y_val_np = ((np.asarray(values, dtype=np.float32) - center) / scale).reshape(-1, 1)
         y_val = torch.as_tensor(y_val_np, device="cuda")
-        regressor, regressor_config = make_model(args.seed + 100003 + abs(hash(key)) % 100000)
+        regressor, regressor_config = make_model(domain_seed + 100003)
         train_model(regressor, x_val, y_val, args.steps, args.batch_size, args.learning_rate, "regressor")
         pred_norm = infer(regressor, x_val)[:, 0].cpu().numpy()
         pred_values = pred_norm * scale + center
@@ -273,6 +282,9 @@ def encode_domain(key, leaves, args):
         "leaves": leaf_payload,
         "metrics": {
             "classifier_accuracy": classifier_accuracy,
+            "occupancy_iou": float(occupancy_iou),
+            "occupancy_precision": float(occupancy_precision),
+            "occupancy_recall": float(occupancy_recall),
             "occupancy_corrections": sum(len(x) for x in occupancy_corrections),
             "value_rmse_before_corrections": value_rmse,
             "value_corrections": sum(len(x) for x in value_corrections),
