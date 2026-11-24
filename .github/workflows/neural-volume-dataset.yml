@@ -139,3 +139,12 @@ jobs:
             tools/neural_volume/znvds_to_nanovdb.cpp \
             tools/neural_volume/znvds_to_nanovdb_main.cpp \
             -o znvds-to-nanovdb
+      - name: Compile Zeno ZNVDS conversion node against real Zeno headers
+        run: |
+          g++ -std=c++17 -Wno-deprecated-declarations -fsyntax-only \
+            -Izeno/include \
+            -Iprojects/zenvdb/include \
+            -Iprojects/oldzenbase/include \
+            -Itools/neural_volume \
+            -isystem projects/zenvdb/nanovdb-upstream/nanovdb \
+            projects/zenvdb/ZNVDSFileToNanoVDB.cpp
