@@ -27,7 +27,7 @@ struct DecodedNeuralLeaf {
 // requested leaf. It does not materialize a complete OpenVDB grid.
 class NeuralVolumeDecoder {
 public:
-    explicit NeuralVolumeDecoder(const NeuralVolumeModel& model);
+    explicit NeuralVolumeDecoder(NeuralVolumeModel model);
     ~NeuralVolumeDecoder();
     NeuralVolumeDecoder(NeuralVolumeDecoder&&) noexcept;
     NeuralVolumeDecoder& operator=(NeuralVolumeDecoder&&) noexcept;
