@@ -24,7 +24,7 @@ This folder contains the first offline neural-compression experiment for Zeno.
    python tools/neural_volume/train_znvds.py input.znvds output.znvm
    ```
 
-## First-pass model
+Validate the output container with:\n\n```bash\npython tools/neural_volume/inspect_znvm.py output.znvm\n```\n\n## First-pass model
 
 - Domain size: 128³ voxels by default.
 - Per-domain occupancy classifier: tiny-cuda-nn HashGrid + CutlassMLP.
@@ -43,13 +43,13 @@ Useful controls:
 ## Important limitations
 
 - This is an experimental encoder checkpoint, not a production NeuralVDB replacement.
-- `.znvm` is a PyTorch checkpoint. There is no C++ Zeno decoder yet.
+- `.znvm` is a portable little-endian binary container with tiny-cuda-nn model parameters and correction records. There is no C++ Zeno decoder yet.
 - Exact occupancy reconstruction depends on matching tiny-cuda-nn inference behavior and numeric precision between encoding and decoding.
 - Values not covered by corrections are lossy within the requested tolerance.
 - FloatGrid and linear/affine transforms only.
 - The first version retains the leaf block list and upper active tiles explicitly; it does not yet learn the parent-level VDB child/tile classifier.
 - Training requires an NVIDIA GPU, CUDA-enabled PyTorch and tiny-cuda-nn. The Python extension does not run on CPU.
-- Load only checkpoints produced by trusted sources; PyTorch checkpoint loading uses Python serialization.
+- The binary inspector validates container structure and counts; it does not prove model reconstruction quality.
 
 ## Reproducibility and license
 
