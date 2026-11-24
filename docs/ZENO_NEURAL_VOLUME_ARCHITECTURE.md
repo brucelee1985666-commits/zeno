@@ -126,6 +126,8 @@ Dependências do treinamento: Python, NumPy, PyTorch com CUDA e tiny-cuda-nn ins
 
 A amostragem de minibatches agora usa um `torch.Generator` CUDA local por domínio, inicializado com a seed derivada da chave espacial. Classificador e regressor usam seeds distintas e estáveis. A seed global de treinamento e a indicação desse modo de amostragem também são gravadas no JSON de metadados do ZNVM. Isso remove a dependência da sequência global de sorteios entre domínios. A reprodutibilidade bit a bit ainda depende da versão do PyTorch/CUDA, GPU e kernels determinísticos disponíveis; portanto, não é prometida entre hardwares diferentes.
 
+O leitor C++ também rejeita offsets de correção duplicados, pesos/parâmetros não finitos, métricas não finitas e valores de tiles/correções inválidos. Fixtures negativas cobrem duplicatas e NaN antes de conectar o runtime CUDA.
+
 ### Gate 2B — leitor C++ do contêiner ZNVM (implementado e compilado em CI)
 
 Foi adicionado `projects/zenvdb/NeuralVolumeModel.h/.cpp`:
