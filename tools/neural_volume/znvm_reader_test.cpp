@@ -94,6 +94,29 @@ int main() {
         assert(values[3] == 0.75f);
     }
     {
+        zeno::neuralvolume::LeafCorrections corrections;
+        corrections.occupancyOffsets = {7, 9};
+        std::array<float, 512> logits{};
+        logits.fill(-1.0f);
+        logits[9] = 1.0f; // false positive corrected back to inactive
+        std::array<uint8_t, 512> occupancy{};
+        const auto active = zeno::neuralvolume::correctedActiveOffsets(
+            corrections, logits, occupancy);
+        assert(active.size() == 1);
+        assert(active[0] == 7); // corrected false negative must enter regressor sampling
+        assert(occupancy[7] == 1);
+        assert(occupancy[9] == 0);
+
+        logits[3] = std::numeric_limits<float>::quiet_NaN();
+        bool rejected = false;
+        try {
+            (void)zeno::neuralvolume::correctedActiveOffsets(corrections, logits, occupancy);
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        assert(rejected);
+    }
+    {
         std::istringstream input(fixture(true, false), std::ios::binary);
         auto model = zeno::neuralvolume::readZNVM(input);
         assert(model.partial);
