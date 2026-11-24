@@ -22,5 +22,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Check neural trainer syntax
+        run: python -m py_compile tools/neural_volume/inspect_znvds.py tools/neural_volume/train_znvds.py
       - name: Validate ZNVDS parser
         run: python -m unittest discover -s tools/neural_volume -p "test_*.py" -v
