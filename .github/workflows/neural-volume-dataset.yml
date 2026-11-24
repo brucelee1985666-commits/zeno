@@ -70,6 +70,50 @@ jobs:
             -c projects/zenvdb/TinyCudaNNRuntime.cu \
             -o /tmp/TinyCudaNNRuntime.o
 
+  zeno-node-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Fetch pinned upstream NanoVDB headers
+        run: git submodule update --init projects/zenvdb/nanovdb-upstream
+      - name: Install Zeno headless runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ pkg-config \
+            libopenvdb-dev libtbb-dev libblosc-dev zlib1g-dev \
+            libboost-iostreams-dev libboost-system-dev libboost-filesystem-dev \
+            libboost-regex-dev libimath-dev libopenexr-dev
+      - name: Configure real Zeno runtime without editor or CUDA
+        run: |
+          cmake -S . -B build-zeno-node-runtime -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DZENO_BUILD_EDITOR=OFF \
+            -DZENO_BUILD_DESIGNER=OFF \
+            -DZENO_BUILD_PLAYER=OFF \
+            -DZENO_WITH_zenvdb=ON \
+            -DZENO_SYSTEM_OPENVDB=ON \
+            -DZENO_BUILD_NEURAL_VOLUME_NODE_TESTS=ON \
+            -DZENO_WITH_CUDA=OFF \
+            -DZENO_USE_CCACHE=OFF \
+            -DZENO_ENABLE_OPENMP=OFF
+      - name: Build Zeno and node integration executables
+        run: |
+          cmake --build build-zeno-node-runtime \
+            --target zeno-neural-volume-node-smoke write-independent-vdb-fixture \
+            --parallel 2
+      - name: Generate independent VDB file using a separate executable
+        run: |
+          mkdir -p build-zeno-node-runtime/neural-volume-test
+          build-zeno-node-runtime/bin/write-independent-vdb-fixture \
+            build-zeno-node-runtime/neural-volume-test/external-input.vdb
+      - name: Execute actual Zeno graph nodes and verify disk outputs
+        run: |
+          build-zeno-node-runtime/bin/zeno-neural-volume-node-smoke \
+            build-zeno-node-runtime/neural-volume-test/external-input.vdb \
+            build-zeno-node-runtime/neural-volume-test/from-zeno-node.znvds \
+            build-zeno-node-runtime/neural-volume-test/from-zeno-node.nvdb
+
   nanovdb-api:
     runs-on: ubuntu-latest
     steps:
