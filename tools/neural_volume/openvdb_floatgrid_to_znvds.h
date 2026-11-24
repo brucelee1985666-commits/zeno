@@ -1,8 +1,8 @@
 #pragma once
 
-#include <filesystem>
+#include <openvdb/openvdb.h>
 
-namespace openvdb { class FloatGrid; }
+#include <filesystem>
 
 namespace zeno::neural_volume {
 
