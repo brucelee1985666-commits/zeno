@@ -434,21 +434,15 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
     // Apply occupancy corrections before selecting regressor samples. A
     // corrected false-negative voxel must receive a neural value prediction,
     // not the background value. Exact-value corrections are applied last.
-    for (uint16_t i = 0; i < 512; ++i) {
-        decoded.occupancy[i] = logits[i] >= 0.0f ? 1u : 0u;
-    }
-    for (uint16_t offset : leafCorrections.occupancyOffsets) {
-        if (offset >= 512) throw std::out_of_range("leaf occupancy correction offset out of range");
-        decoded.occupancy[offset] = static_cast<uint8_t>(1u - decoded.occupancy[offset]);
-    }
+    std::array<float, 512> classifierLogits{};
+    std::copy(logits.begin(), logits.end(), classifierLogits.begin());
+    const auto activeOffsets = correctedActiveOffsets(
+        leafCorrections, classifierLogits, decoded.occupancy);
 
     std::vector<std::array<float, 3>> activePoints;
-    std::vector<uint16_t> activeOffsets;
-    for (uint16_t i = 0; i < 512; ++i) {
-        if (decoded.occupancy[i]) {
-            activePoints.push_back(points[i]);
-            activeOffsets.push_back(i);
-        }
+    activePoints.reserve(activeOffsets.size());
+    for (uint16_t offset : activeOffsets) {
+        activePoints.push_back(points[offset]);
     }
     if (domain.hasRegressor) {
         const auto normalizedValues = domain.regressor->infer(activePoints);
