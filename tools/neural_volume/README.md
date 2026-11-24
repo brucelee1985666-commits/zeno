@@ -47,7 +47,7 @@ Useful controls:
 - Exact occupancy reconstruction depends on matching tiny-cuda-nn inference behavior and numeric precision between encoding and decoding.
 - Values not covered by corrections are lossy within the requested tolerance.
 - FloatGrid and linear/affine transforms only.
-- The first version retains the leaf block list and upper active tiles explicitly; it does not yet learn the parent-level VDB child/tile classifier.
+- The first version retains the leaf block list and upper active tiles explicitly; it does not yet learn the parent-level VDB child/tile classifier. Domains are currently disjoint and are not blended, so boundary continuity is not yet guaranteed.
 - Training requires an NVIDIA GPU, CUDA-enabled PyTorch and tiny-cuda-nn. The Python extension does not run on CPU.
 - The binary inspector validates container structure and counts; it does not prove model reconstruction quality.
 
