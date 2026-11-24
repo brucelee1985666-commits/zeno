@@ -23,7 +23,7 @@ void writeFixture(const std::filesystem::path& p) {
     const std::string name="znvds-roundtrip"; u32(o,static_cast<uint32_t>(name.size())); o.write(name.data(),name.size());
     u32(o,2); f32(o,0.0f); f32(o,0.5f); f32(o,1.0f); f32(o,1.5f);
     // Non-uniform scale plus translation, row-major index-to-world affine.
-    const double m[16]={2,0,0,0, 0,3,0,0, 0,0,4,0, 10,-4,7,1};
+    const double m[16]={2,0.5,0,0, 0,3,0.25,0, 0,0,4,0, 10,-4,7,1};
     for(double v:m) f64(o,v);
     // Active tiles at all three NanoVDB hierarchy levels.
     i32(o,64); i32(o,0); i32(o,0); u32(o,1); f32(o,2.5f);
@@ -67,8 +67,8 @@ int main() {
         if(std::string(grid->gridName())!="znvds-roundtrip")
             throw std::runtime_error("round-trip changed grid name");
         const auto world=grid->map().applyMap(nanovdb::Vec3d(-8,16,24));
-        if(std::abs(world[0]+6.0)>1e-9 || std::abs(world[1]-44.0)>1e-9 ||
-           std::abs(world[2]-103.0)>1e-9)
+        if(std::abs(world[0]+6.0)>1e-9 || std::abs(world[1]-40.0)>1e-9 ||
+           std::abs(world[2]-107.0)>1e-9)
             throw std::runtime_error("round-trip changed affine transform");
         // The C++ parser must reject a truncated file, not silently emit a partial grid.
         const auto badPath=std::filesystem::temp_directory_path()/"znvds-to-nanovdb-truncated.znvds";
