@@ -59,8 +59,14 @@ jobs:
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - name: Compile NanoVDB conversion API smoke
         run: |
+          VERSION_HEADER=$(find build-openvdb -name version.h -print -quit)
+          if [ -z "$VERSION_HEADER" ]; then
+            echo "OpenVDB CMake did not generate version.h"
+            exit 1
+          fi
+          VERSION_INCLUDE_DIR=$(dirname "$VERSION_HEADER")
           g++ -std=c++17 -fsyntax-only \
-            -Ibuild-openvdb/openvdb/openvdb \
+            -I"$VERSION_INCLUDE_DIR" \
             -Iprojects/zenvdb/openvdb/openvdb \
             -Iprojects/zenvdb/openvdb/nanovdb \
             tools/neural_volume/nanovdb_api_smoke.cpp
