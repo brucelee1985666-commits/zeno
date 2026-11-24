@@ -1,28 +1,14 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.20)
 project(ZenoOpenVDBFloatGridRoundTrip LANGUAGES CXX)
 
-if(NOT DEFINED OPENVDB_SOURCE_DIR OR NOT DEFINED NANOVDB_INCLUDE_DIR)
-    message(FATAL_ERROR "Set OPENVDB_SOURCE_DIR and NANOVDB_INCLUDE_DIR")
+if(NOT DEFINED NANOVDB_INCLUDE_DIR)
+    message(FATAL_ERROR "Set NANOVDB_INCLUDE_DIR")
 endif()
 
-set(OPENVDB_BUILD_BINARIES OFF CACHE BOOL "" FORCE)
-set(OPENVDB_BUILD_UNITTESTS OFF CACHE BOOL "" FORCE)
-set(OPENVDB_BUILD_PYTHON_MODULE OFF CACHE BOOL "" FORCE)
-set(OPENVDB_BUILD_NANOVDB OFF CACHE BOOL "" FORCE)
-set(OPENVDB_BUILD_CORE ON CACHE BOOL "" FORCE)
-# Match Zeno's own vendored OpenVDB linkage and avoid building both library variants.
-set(OPENVDB_CORE_SHARED OFF CACHE BOOL "" FORCE)
-set(OPENVDB_CORE_STATIC ON CACHE BOOL "" FORCE)
-set(USE_NANOVDB OFF CACHE BOOL "" FORCE)
-# The fixture never writes .vdb compression streams. Disable legacy vendored
-# Blosc/ZLIB here to avoid rebuilding old bundled C code with newer CI compilers.
-set(USE_BLOSC OFF CACHE BOOL "" FORCE)
-set(USE_ZLIB OFF CACHE BOOL "" FORCE)
-set(USE_EXR OFF CACHE BOOL "" FORCE)
-set(USE_IMATH_HALF OFF CACHE BOOL "" FORCE)
-set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
-
-add_subdirectory("${OPENVDB_SOURCE_DIR}" openvdb-build)
+# Link the distro OpenVDB runtime for a fast executable CPU test. The production
+# Zeno exporter is separately syntax-checked against the pinned OpenVDB submodule.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(OpenVDB REQUIRED IMPORTED_TARGET OpenVDB)
 
 add_executable(openvdb-floatgrid-roundtrip-smoke
     ../openvdb_floatgrid_roundtrip_smoke.cpp
@@ -31,4 +17,4 @@ add_executable(openvdb-floatgrid-roundtrip-smoke
 target_compile_features(openvdb-floatgrid-roundtrip-smoke PRIVATE cxx_std_17)
 target_include_directories(openvdb-floatgrid-roundtrip-smoke PRIVATE
     "${NANOVDB_INCLUDE_DIR}")
-target_link_libraries(openvdb-floatgrid-roundtrip-smoke PRIVATE openvdb)
+target_link_libraries(openvdb-floatgrid-roundtrip-smoke PRIVATE PkgConfig::OpenVDB)
