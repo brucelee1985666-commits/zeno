@@ -42,6 +42,9 @@ else()
     message(STATUS "Matching NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
 endif()
 
+set(ZENO_NANOVDB_UPSTREAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream")
+set(ZENO_ZNVDS_CONVERTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/neural_volume")
+
 # The OpenVDB FloatGrid exporter is a reusable CPU serializer used by
 # ExportNeuralVolumeDataset. It is linked with the same OpenVDB target/ABI.
 if (ZENO_NANOVDB_INCLUDE_DIR)
@@ -183,6 +186,40 @@ endif()
 # and include usage requirements as the main Zeno target.
 if (TARGET zeno_znvds_nanovdb_cpu AND TARGET openvdb)
     target_link_libraries(zeno_znvds_nanovdb_cpu PRIVATE openvdb)
+endif()
+
+# The actual Zeno graph-node smoke test is opt-in because it links the full
+# Zeno runtime. It exercises ReadVDB -> ExportNeuralVolumeDataset ->
+# ZNVDSFileToNanoVDB against a separately generated .vdb file.
+option(ZENO_BUILD_NEURAL_VOLUME_NODE_TESTS
+    "Build the headless Zeno neural-volume graph-node integration tests" OFF)
+if (ZENO_BUILD_NEURAL_VOLUME_NODE_TESTS)
+    if (NOT TARGET zeno_znvds_nanovdb_cpu)
+        message(FATAL_ERROR
+            "ZENO_BUILD_NEURAL_VOLUME_NODE_TESTS requires the pinned NanoVDB CPU converter target")
+    endif()
+
+    add_executable(zeno-neural-volume-node-smoke
+        "${ZENO_ZNVDS_CONVERTER_DIR}/zeno_neural_volume_node_smoke.cpp")
+    target_compile_features(zeno-neural-volume-node-smoke PRIVATE cxx_std_17)
+    target_include_directories(zeno-neural-volume-node-smoke PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${ZENO_NANOVDB_UPSTREAM_ROOT}")
+    target_link_libraries(zeno-neural-volume-node-smoke PRIVATE zeno)
+    if (ZENO_SYSTEM_OPENVDB)
+        target_link_libraries(zeno-neural-volume-node-smoke PRIVATE OpenVDB::openvdb)
+    else()
+        target_link_libraries(zeno-neural-volume-node-smoke PRIVATE openvdb)
+    endif()
+
+    add_executable(write-independent-vdb-fixture
+        "${ZENO_ZNVDS_CONVERTER_DIR}/write_independent_vdb_fixture.cpp")
+    target_compile_features(write-independent-vdb-fixture PRIVATE cxx_std_17)
+    if (ZENO_SYSTEM_OPENVDB)
+        target_link_libraries(write-independent-vdb-fixture PRIVATE OpenVDB::openvdb)
+    else()
+        target_link_libraries(write-independent-vdb-fixture PRIVATE openvdb)
+    endif()
 endif()
 
 if (WIN32)
