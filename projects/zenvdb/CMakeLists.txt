@@ -21,9 +21,18 @@ endif()
 target_sources(zeno PRIVATE ${PROJECT_SOURCE})
 target_include_directories(zeno PRIVATE ../oldzenbase/include)
 
-# NanoVDB headers are vendored inside the pinned OpenVDB submodule.
-# Keep the dependency header-only here; CUDA buffer support is gated separately.
-target_include_directories(zeno PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/openvdb/nanovdb)
+# NanoVDB is optional when building against a system OpenVDB installation.
+# The conversion/dataset nodes are compiled only when its public headers are available.
+find_path(ZENO_NANOVDB_INCLUDE_DIR
+    nanovdb/NanoVDB.h
+    HINTS ${CMAKE_CURRENT_SOURCE_DIR}/openvdb/nanovdb
+)
+if (ZENO_NANOVDB_INCLUDE_DIR)
+    target_include_directories(zeno PRIVATE ${ZENO_NANOVDB_INCLUDE_DIR})
+else()
+    list(FILTER PROJECT_SOURCE EXCLUDE REGEX "(OpenVDBToNanoVDB|ExportNeuralVolumeDataset)\\.cpp$")
+    message(STATUS "NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
+endif()
 
 target_include_directories(zeno PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
