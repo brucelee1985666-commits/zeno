@@ -45,6 +45,23 @@ endif()
 # Add sources only after the optional NanoVDB files have been filtered.
 target_sources(zeno PRIVATE ${PROJECT_SOURCE})
 
+# The neural inference backend is optional: the standard Zeno build does not
+# acquire a new CUDA/tiny-cuda-nn dependency.
+option(ZENO_WITH_TINY_CUDA_NN "Enable the optional tiny-cuda-nn neural volume runtime" OFF)
+if (ZENO_WITH_TINY_CUDA_NN)
+    if (NOT CMAKE_CUDA_COMPILER_LOADED)
+        enable_language(CUDA)
+    endif()
+    if (NOT TARGET tiny-cuda-nn)
+        message(FATAL_ERROR
+            "ZENO_WITH_TINY_CUDA_NN requires the tiny-cuda-nn target to be provided by the parent build")
+    endif()
+    target_sources(zeno PRIVATE TinyCudaNNRuntime.cu)
+    target_link_libraries(zeno PRIVATE tiny-cuda-nn)
+    set_target_properties(zeno PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
+    target_compile_definitions(zeno PRIVATE ZENO_WITH_TINY_CUDA_NN=1)
+endif()
+
 target_include_directories(zeno PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/Zeno/zeno>)
