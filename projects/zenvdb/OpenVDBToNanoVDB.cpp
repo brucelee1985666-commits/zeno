@@ -2,6 +2,7 @@
 #include <zeno/VDBGrid.h>
 
 #include <nanovdb/util/OpenToNanoVDB.h>
+#include <nanovdb/util/NanoToOpenVDB.h>
 #include <nanovdb/util/IO.h>
 
 #include <filesystem>
@@ -56,6 +57,46 @@ ZENDEFNODE(OpenVDBToNanoVDB,
         },
         /* params: */ {
             {"writepath", "path", ""},
+        },
+        /* category: */ {
+            "nanovdb",
+        }
+    });
+
+struct NanoVDBToOpenVDB : INode {
+    void apply() override {
+        const auto path = get_param<std::string>("path");
+        if (path.empty()) {
+            throw zeno::Exception("NanoVDBToOpenVDB requires an input .nvdb path");
+        }
+
+        auto handle = nanovdb::io::readGrid(path);
+        if (!handle) {
+            throw zeno::Exception("NanoVDBToOpenVDB could not read a grid from the file");
+        }
+
+        auto baseGrid = nanovdb::nanoToOpenVDB(handle);
+        auto floatGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(baseGrid);
+        if (!floatGrid) {
+            throw zeno::Exception(
+                "NanoVDBToOpenVDB currently accepts FloatGrid NanoVDB files only");
+        }
+
+        auto output = zeno::IObject::make<VDBFloatGrid>();
+        output->m_grid = std::move(floatGrid);
+        set_output("grid", std::move(output));
+    }
+};
+
+ZENDEFNODE(NanoVDBToOpenVDB,
+    {
+        /* inputs: */ {
+        },
+        /* outputs: */ {
+            "grid",
+        },
+        /* params: */ {
+            {"readpath", "path", ""},
         },
         /* category: */ {
             "nanovdb",
