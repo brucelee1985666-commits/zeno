@@ -119,7 +119,7 @@ convertZnvdsToNanoVdb(const std::filesystem::path& path) {
 
     const std::string name = in.string("grid name");
     const uint32_t gridClass = in.u32("grid class");
-    if (gridClass > static_cast<uint32_t>(nanovdb::GridClass::Staggered))
+    if (gridClass >= static_cast<uint32_t>(nanovdb::GridClass::End))
         throw std::runtime_error("unsupported ZNVDS grid class");
     const float background = in.f32("background");
     if (!std::isfinite(background)) throw std::runtime_error("non-finite ZNVDS background");
@@ -152,8 +152,10 @@ convertZnvdsToNanoVdb(const std::filesystem::path& path) {
         const int32_t x=in.i32("tile x"), y=in.i32("tile y"), z=in.i32("tile z");
         const uint32_t level=in.u32("tile level");
         const float value=in.f32("tile value");
-        if (level < 1 || level > 3 || !std::isfinite(value))
-            throw std::runtime_error("invalid ZNVDS active tile");
+        const int32_t tileDim = level == 1 ? 8 : (level == 2 ? 128 : 4096);
+        if (level < 1 || level > 3 || !std::isfinite(value) ||
+            (x % tileDim) != 0 || (y % tileDim) != 0 || (z % tileDim) != 0)
+            throw std::runtime_error("invalid or misaligned ZNVDS active tile");
         if (!seenTiles.emplace(x,y,z,level).second)
             throw std::runtime_error("duplicate ZNVDS active tile");
         addTile(source, level, nanovdb::Coord(x,y,z), value);
