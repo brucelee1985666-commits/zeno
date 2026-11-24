@@ -132,3 +132,10 @@ jobs:
             tools/neural_volume/znvds_to_nanovdb_smoke.cpp \
             -o znvds-to-nanovdb-smoke
           ./znvds-to-nanovdb-smoke
+      - name: Compile standalone ZNVDS to NanoVDB converter
+        run: |
+          g++ -std=c++17 -pthread -Wall -Wextra -Werror \
+            -isystem projects/zenvdb/nanovdb-upstream/nanovdb \
+            tools/neural_volume/znvds_to_nanovdb.cpp \
+            tools/neural_volume/znvds_to_nanovdb_main.cpp \
+            -o znvds-to-nanovdb
