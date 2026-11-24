@@ -23,15 +23,15 @@ int main() {
     const auto* grid = handle.grid<float>();
     if (!grid) throw std::runtime_error("CPU NanoVDB builder returned no FloatGrid");
 
-    if (!grid->isActive(a) || !grid->isActive(b)) {
+    if (!grid->tree().isActive(a) || !grid->tree().isActive(b)) {
         throw std::runtime_error("CPU NanoVDB conversion lost active leaf voxels");
     }
-    if (std::abs(grid->getValue(a) - 0.25f) > 1.0e-6f ||
-        std::abs(grid->getValue(b) - 0.75f) > 1.0e-6f) {
+    if (std::abs(grid->tree().getValue(a) - 0.25f) > 1.0e-6f ||
+        std::abs(grid->tree().getValue(b) - 0.75f) > 1.0e-6f) {
         throw std::runtime_error("CPU NanoVDB conversion changed leaf scalar values");
     }
-    if (!grid->isActive(tileProbe) ||
-        std::abs(grid->getValue(tileProbe) - 2.5f) > 1.0e-6f) {
+    if (!grid->tree().isActive(tileProbe) ||
+        std::abs(grid->tree().getValue(tileProbe) - 2.5f) > 1.0e-6f) {
         throw std::runtime_error("CPU NanoVDB conversion did not preserve active tile value");
     }
 
