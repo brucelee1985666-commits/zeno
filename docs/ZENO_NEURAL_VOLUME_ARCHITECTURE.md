@@ -85,6 +85,13 @@ Implementar consulta por bloco sem materializar o volume inteiro. Avaliar tiny-c
 
 Adicionar warm-start sequencial de pesos, política de novos blocos e detecção de mudanças de topologia. Nunca reutilizar pesos sem validar bounds, transform e identidade do bloco.
 
+## Auditoria inicial dos backends neurais
+
+- tiny-cuda-nn é um candidato concreto para MLPs, codificação hash, treinamento e inferência CUDA; ele não fornece a hierarquia VDB nem a garantia de topologia lossless. O README upstream atual pede CMake 3.21+, enquanto este fork declara CMake 3.15 no projeto raiz. Portanto, não adicionar o upstream atual diretamente como submódulo antes de decidir entre uma versão compatível ou uma atualização deliberada do baseline CMake.
+- ƒVDB é uma infraestrutura esparsa de GPU integrada ao ecossistema PyTorch. É candidato para prototipagem/treinamento offline, mas não deve entrar no runtime C++ do Zeno como dependência pesada nesta fase.
+- ZPC já está presente no fork e fornece infraestrutura CUDA/memória. Reutilizar seus recursos onde couber, sem criar um segundo alocador ou runtime paralelo.
+- A decisão de backend deve ser tomada após fixar uma versão, conferir licença, CUDA/CMake mínimos e validar o caminho de exportação/importação de pesos. A arquitetura do arquivo neural permanece independente do backend.
+
 ## Métricas obrigatórias
 
 - razão de compressão em disco e em memória;
