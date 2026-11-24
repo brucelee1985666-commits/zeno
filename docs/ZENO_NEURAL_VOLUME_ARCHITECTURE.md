@@ -211,10 +211,10 @@ os valores escalares são mantidos em buffers GPU.
 - O caminho de decodificação com montagem no host aplica correções de ocupação
   antes de escolher as amostras do regressor. Isso evita que um falso negativo corrigido para ativo
   receba incorretamente o valor de background.
-- O treinador conserva os valores ativos de uma casca de uma leaf (8 voxels)
-  nas seis faces de cada domínio. Assim, as faces de domínios vizinhos usam
-  valores de origem exatos. O interior continua usando o regressor e correções
-  exatas apenas quando excede a tolerância.
+- O treinador conserva exatamente os valores ativos nos seis planos de voxels
+  que delimitam cada domínio. Assim, os domínios vizinhos compartilham amostras
+  exatas na interface. O interior continua usando o regressor e correções exatas
+  apenas quando excede a tolerância.
 - Esta política é um fallback exato de fronteira, não blending entre redes.
   Ela reduz o risco de seams entre domínios sem adicionar uma segunda rede ou
   uma nova dependência.
