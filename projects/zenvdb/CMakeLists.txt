@@ -21,6 +21,10 @@ endif()
 target_sources(zeno PRIVATE ${PROJECT_SOURCE})
 target_include_directories(zeno PRIVATE ../oldzenbase/include)
 
+# NanoVDB headers are vendored inside the pinned OpenVDB submodule.
+# Keep the dependency header-only here; CUDA buffer support is gated separately.
+target_include_directories(zeno PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/openvdb/nanovdb)
+
 target_include_directories(zeno PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/Zeno/zeno>)
