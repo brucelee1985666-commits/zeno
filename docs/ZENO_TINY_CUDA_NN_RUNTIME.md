@@ -26,10 +26,12 @@ For each requested leaf the decoder:
 2. Generates the same domain-local normalized xyz coordinates used by the
    Python trainer.
 3. Runs the occupancy classifier for the 512 leaf voxels.
-4. The CPU convenience path evaluates the regressor for predicted active
-   voxels; the device path evaluates all 512 positions to keep the output on
-   the GPU, then restores values using the stored center and scale.
-5. Applies exact occupancy flips and exact-value corrections from the ZNVM.
+4. Applies exact occupancy flips before selecting the CPU regressor samples.
+   This ordering is essential: a false-negative corrected to active must still
+   receive a neural value prediction. The device path evaluates all 512
+   positions, then restores values using the stored center and scale.
+5. Applies exact-value corrections last, so exact values are never overwritten
+   by the regressor.
 6. The CPU convenience API returns one `DecodedNeuralLeaf` with 512 occupancy flags and values. For a device-resident result, use `decodeLeafDevice()` below.
 
 A domain without a regressor must provide exact values for every active voxel;
@@ -53,7 +55,19 @@ classifier and regressor networks; this is valid because the trainer creates
 both with the same HashGrid and CutlassMLP architecture. Partial checkpoints
 are intentionally rejected by the complete-volume decoder.
 
-No CUDA compilation or GPU inference is claimed by the existing CPU-only CI.
+Each domain is an independent local neural field. To prevent value seams at
+domain boundaries, the trainer stores active values exactly for a one-leaf
+(8-voxel) shell on all six faces of every domain. Interior values still use
+the configured error tolerance and sparse exact corrections. This is a
+conservative continuity fallback, not neural blending: it trades some
+compression at boundaries for deterministic matching values across adjacent
+domains. Occupancy remains losslessly corrected throughout each leaf.
+
+The CUDA bridge has a separate compile-only CI job using the pinned
+CUDA/tiny-cuda-nn/NanoVDB headers. That job can establish source-level CUDA
+compilation but cannot establish GPU execution, numerical correctness,
+throughput, or VRAM usage. Actual GPU inference and round-trip tests remain
+unverified until run on NVIDIA hardware.
 
 
 ## Device-resident decoded leaves
