@@ -1,6 +1,7 @@
 #include <zeno/core/Graph.h>
 #include <zeno/core/Session.h>
 #include <zeno/extra/GlobalStatus.h>
+#include <zeno/extra/GraphException.h>
 
 #include <openvdb/openvdb.h>
 #include <openvdb/io/File.h>
@@ -16,6 +17,21 @@ namespace fs = std::filesystem;
 
 static void require(bool ok, const std::string& message) {
     if (!ok) throw std::runtime_error(message);
+}
+
+static void executeGraph(const std::shared_ptr<zeno::Graph>& graph,
+                         const std::string& nodeId,
+                         zeno::Session& session) {
+    try {
+        graph->applyNodes({nodeId});
+    } catch (const zeno::GraphException& error) {
+        const auto status = error.evalStatus();
+        throw std::runtime_error(
+            "Zeno graph failed in node '" + error.nodeName + "': " +
+            status.toJson());
+    }
+    require(!session.globalStatus->failed(),
+            "Zeno graph execution failed: " + session.globalStatus->toJson());
 }
 
 int main(int argc, char** argv) {
@@ -43,15 +59,15 @@ int main(int argc, char** argv) {
         // Execute the actual Zeno graph nodes, not the underlying helper functions.
         auto exportGraph = session.createGraph();
         exportGraph->addNode("ReadVDB", "read_external_vdb");
-        exportGraph->setNodeParam("read_external_vdb", "path", inputPath.string());
-        exportGraph->setNodeParam("read_external_vdb", "type", std::string("float"));
+        // ReadVDB declares "path" as an input socket, not a parameter.
+        // setNodeParam would write "path:" and leave the socket empty.
+        exportGraph->setNodeInput(
+            "read_external_vdb", "path",
+            zeno::objectFromLiterial(inputPath.string()));
         exportGraph->addNode("ExportNeuralVolumeDataset", "export_znvds");
         exportGraph->setNodeParam("export_znvds", "path", znvdsPath.string());
         exportGraph->bindNodeInput("export_znvds", "grid", "read_external_vdb", "data");
-        exportGraph->applyNodes({"export_znvds"});
-        require(!session.globalStatus->failed(),
-                "Zeno ExportNeuralVolumeDataset graph execution failed: " +
-                session.globalStatus->toJson());
+        executeGraph(exportGraph, "export_znvds", session);
         require(fs::is_regular_file(znvdsPath) && fs::file_size(znvdsPath) > 64,
                 "ExportNeuralVolumeDataset node did not produce a non-empty ZNVDS file");
 
@@ -61,10 +77,7 @@ int main(int argc, char** argv) {
         convertGraph->addNode("ZNVDSFileToNanoVDB", "convert_znvds");
         convertGraph->setNodeParam("convert_znvds", "inputpath", znvdsPath.string());
         convertGraph->setNodeParam("convert_znvds", "outputpath", nvdbPath.string());
-        convertGraph->applyNodes({"convert_znvds"});
-        require(!session.globalStatus->failed(),
-                "Zeno ZNVDSFileToNanoVDB graph execution failed: " +
-                session.globalStatus->toJson());
+        executeGraph(convertGraph, "convert_znvds", session);
         require(fs::is_regular_file(nvdbPath) && fs::file_size(nvdbPath) > 64,
                 "ZNVDSFileToNanoVDB node did not produce a non-empty NanoVDB file");
 
