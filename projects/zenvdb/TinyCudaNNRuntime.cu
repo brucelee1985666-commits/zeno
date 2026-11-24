@@ -680,6 +680,9 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
     DeviceBuffer<int> dError(1);
     checkCuda(cudaMemsetAsync(dCount.get(), 0, sizeof(unsigned long long), stream), "clear NanoVDB active count");
     checkCuda(cudaMemsetAsync(dError.get(), 0, sizeof(int), stream), "clear NanoVDB bridge error");
+    // Leaf inference uses per-leaf streams. Complete the shared counters'
+    // initialization before any of those streams can append into them.
+    checkCuda(cudaStreamSynchronize(stream), "initialize NanoVDB append counters");
 
     // Decode one neural leaf at a time. Each append is completed before its
     // owner releases the leaf buffers; only compacted active voxels persist.
@@ -705,6 +708,9 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
     if (activeCount != model.sourceActiveVoxels) {
         throw std::runtime_error("decoded active voxel count does not match ZNVM source topology");
     }
+    if (activeCount > static_cast<uint64_t>(std::numeric_limits<unsigned>::max()) * 256ull) {
+        throw std::overflow_error("NanoVDB active voxel count exceeds one-dimensional CUDA launch limits");
+    }
 
     // Reuse NanoVDB's own GPU builders: active coordinates -> ValueOnIndex
     // topology -> FloatGrid values. No OpenVDB grid or full voxel array is
@@ -723,6 +729,9 @@ NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
     scatterLeafValuesToIndexGrid<<<static_cast<unsigned>((activeCount + 255) / 256), 256, 0, stream>>>(
         indexGrid, dCoords.get(), dValues.get(), activeCount, dSidecar.get(), dError.get());
     checkCuda(cudaGetLastError(), "scatter neural values into NanoVDB index order");
+    checkCuda(cudaStreamSynchronize(stream), "finish NanoVDB value scatter");
+    checkCuda(cudaMemcpy(&bridgeError, dError.get(), sizeof(bridgeError), cudaMemcpyDeviceToHost), "read NanoVDB value scatter status");
+    if (bridgeError != 0) throw std::runtime_error("NanoVDB ValueOnIndex lookup returned an invalid sidecar index");
     nanovdb::tools::cuda::IndexToGrid<nanovdb::ValueOnIndex> converter(indexGrid, stream);
     converter.setGridName(model.gridName.empty() ? "ZenoNeuralVolume" : model.gridName);
     auto valueHandle = converter.template getHandle<float>(dSidecar.get(), BufferT());
