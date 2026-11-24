@@ -59,7 +59,7 @@ Branch de trabalho: zeno-master-clean-copy, inicialmente idêntica à master.
 
 ### Gate 0 — integração de referência (em andamento)
 
-Adicionar um nó Zeno que converte FloatGrid OpenVDB em NanoVDB e grava um arquivo .nvdb, usando os headers e conversor já presentes no submódulo fixado. Isso comprova o caminho VDB→NanoVDB sem importar uma dependência nova. A primeira entrega usa codec de arquivo NONE; quantização/ZIP/BLOSC serão opções separadas após confirmar a configuração real do build.
+Adicionar nós Zeno para converter FloatGrid OpenVDB em NanoVDB e gravar .nvdb, e para importar .nvdb de volta como FloatGrid OpenVDB, usando os headers e conversores já presentes no submódulo fixado. Isso estabelece um caminho de ida e volta sem importar uma dependência nova. A primeira entrega usa codec de arquivo NONE e precisão integral; quantização/ZIP/BLOSC serão opções separadas após confirmar a configuração real do build.
 
 ### Gate 1 — contrato do codec neural
 
