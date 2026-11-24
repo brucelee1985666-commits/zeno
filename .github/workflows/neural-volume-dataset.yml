@@ -60,7 +60,7 @@ jobs:
             -DZENO_WITH_NANOVDB_CUDA_BUILDERS=1 \
             -DTCNN_MIN_GPU_ARCH=75 \
             -Iprojects/zenvdb/include \
-            -Iprojects/zenvdb/nanovdb-upstream/nanovdb \
+            -Iprojects/zenvdb/nanovdb-upstream \
             -I/tmp/tiny-cuda-nn/include \
             -I/tmp/tiny-cuda-nn/dependencies \
             -c projects/zenvdb/TinyCudaNNRuntime.cu \
