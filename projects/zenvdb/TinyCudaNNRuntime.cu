@@ -43,6 +43,7 @@ struct TinyCudaNNRuntime::Impl {
     void* params = nullptr;
     uint32_t outputWidth = 0;
     bool fp16 = false;
+    bool outputFp16 = false;
     ~Impl() { if (params) cudaFree(params); if (stream) cudaStreamDestroy(stream); }
 };
 TinyCudaNNRuntime::TinyCudaNNRuntime(const std::string& jsonConfig, const std::vector<float>& weights)
@@ -53,6 +54,7 @@ TinyCudaNNRuntime::TinyCudaNNRuntime(const std::string& jsonConfig, const std::v
     m_impl->module.reset(tcnn::cpp::create_network_with_input_encoding(3, 1, config.at("encoding"), config.at("network")));
     if (!m_impl->module) throw std::runtime_error("tiny-cuda-nn network creation failed");
     m_impl->fp16 = m_impl->module->param_precision() == tcnn::cpp::Precision::Fp16;
+    m_impl->outputFp16 = m_impl->module->output_precision() == tcnn::cpp::Precision::Fp16;
     if (storedPrecision != "float16" && storedPrecision != "float32") throw std::runtime_error("unsupported ZNVM parameter precision");
     if ((storedPrecision == "float16") != m_impl->fp16) throw std::runtime_error("ZNVM precision differs from tiny-cuda-nn build precision");
     if (m_impl->module->n_params() != weights.size()) throw std::runtime_error("ZNVM parameter count differs from recreated network");
@@ -80,11 +82,13 @@ TinyCudaNNRuntime::TinyCudaNNRuntime(TinyCudaNNRuntime&&) noexcept = default;
 TinyCudaNNRuntime& TinyCudaNNRuntime::operator=(TinyCudaNNRuntime&&) noexcept = default;
 std::vector<float> TinyCudaNNRuntime::infer(const std::vector<std::array<float, 3>>& points) {
     if (points.empty()) return {};
-    constexpr uint32_t granularity = 256, maxBatch = 65536;
+    const uint32_t granularity = std::max<uint32_t>(1, tcnn::cpp::batch_size_granularity());
+    constexpr uint32_t maxBatch = 65536;
     std::vector<float> result; result.reserve(points.size());
     for (size_t offset = 0; offset < points.size();) {
         uint32_t count = static_cast<uint32_t>(std::min<size_t>(maxBatch, points.size() - offset));
         uint32_t batch = ((count + granularity - 1) / granularity) * granularity;
+        if (batch > maxBatch) batch = maxBatch;
         std::vector<float> hostInput(static_cast<size_t>(batch) * 3);
         for (uint32_t i = 0; i < batch; ++i) {
             const auto& p = points[offset + std::min(i, count - 1)];
@@ -97,7 +101,7 @@ std::vector<float> TinyCudaNNRuntime::infer(const std::vector<std::array<float, 
         checkCuda(cudaMemcpyAsync(input.get(), hostInput.data(), hostInput.size() * sizeof(float), cudaMemcpyHostToDevice, m_impl->stream), "upload inference coordinates");
         const uint32_t blocks = (batch + 255) / 256;
         std::vector<float> hostOutput(batch);
-        if (m_impl->fp16) {
+        if (m_impl->outputFp16) {
             DeviceBuffer<__half> output(static_cast<size_t>(batch) * m_impl->outputWidth);
             m_impl->module->inference(m_impl->stream, batch, input.get(), output.get(), m_impl->params);
             compactHalf<<<blocks, 256, 0, m_impl->stream>>>(output.get(), compact.get(), m_impl->outputWidth, batch);
@@ -227,11 +231,15 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
     (void)sourceDomain;
     // Recover the domain origin from the integer domain key. This exactly
     // matches the trainer's floor(key * domain_size) convention, including negatives.
-    const std::array<int32_t, 3> domainOrigin{{
-        domainKey[0] * static_cast<int32_t>(m_impl->domainSize),
-        domainKey[1] * static_cast<int32_t>(m_impl->domainSize),
-        domainKey[2] * static_cast<int32_t>(m_impl->domainSize)
-    }};
+    std::array<int32_t, 3> domainOrigin{};
+    for (size_t axis = 0; axis < 3; ++axis) {
+        const int64_t coordinate = static_cast<int64_t>(domainKey[axis]) * m_impl->domainSize;
+        if (coordinate < std::numeric_limits<int32_t>::min() ||
+            coordinate > std::numeric_limits<int32_t>::max()) {
+            throw std::overflow_error("ZNVM domain origin exceeds index coordinate range");
+        }
+        domainOrigin[axis] = static_cast<int32_t>(coordinate);
+    }
     const auto points = normalizedLeafCoordinates(origin, domainOrigin, m_impl->domainSize);
     const auto logits = domain.classifier->infer(points);
     if (logits.size() != 512) throw std::runtime_error("classifier returned an invalid leaf sample count");
