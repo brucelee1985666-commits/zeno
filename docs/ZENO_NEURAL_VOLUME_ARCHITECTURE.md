@@ -173,6 +173,29 @@ Não declarar vitória por razão de compressão isolada: NeuralVDB prioriza foo
 - OpenVDB/NanoVDB submódulo usado pelo fork: https://github.com/zenustech/openvdb/tree/015847945a09ff41db27fbd8602ae14b31e27293/nanovdb/nanovdb
 
 
+
+### Validação confiável sem GPU NVIDIA
+
+O caminho de validação sem GPU foi ampliado sem fingir que tiny-cuda-nn roda em
+CPU:
+
+- `inspect_znvds.py` usa apenas a biblioteca padrão do Python para verificar
+  finitude dos valores, alinhamento/duplicação de leaves, ocupação versus
+  amostras escalares, atribuição de domínio inclusive para coordenadas
+  negativas, amostras nos planos de fronteira e um SHA-256 dos registros
+  ativos em ordem de arquivo.
+- `nanovdb_cpu_reference_smoke.cpp` usa o `GridBuilder` CPU oficial do
+  NanoVDB, converte com `createNanoGrid` e verifica valores de voxels ativos
+  e de um tile ativo em um NanoVDB FloatGrid real.
+- Esses testes exercitam parsing, topologia e valores de referência no CPU.
+  Eles não executam HashGrid/MLP, não validam os pesos tiny-cuda-nn e não
+  substituem inferência CUDA.
+
+O upstream tiny-cuda-nn exige GPU NVIDIA e CUDA para treinamento/inferência.
+Por isso ele continua opcional. A CI separada usa o toolkit CUDA para
+compilação sem GPU; compilação não é execução. Não existe alegação de
+treinamento, inferência ou benchmark neural realizado sem hardware compatível.
+
 ## Estado consolidado após a integração do decoder CUDA
 
 A implementação agora contém um caminho funcional em código para recriar redes
@@ -185,8 +208,8 @@ os valores escalares são mantidos em buffers GPU.
 
 ### Correções de fidelidade e continuidade
 
-- A decodificação CPU agora aplica correções de ocupação antes de escolher as
-  amostras do regressor. Isso evita que um falso negativo corrigido para ativo
+- O caminho de decodificação com montagem no host aplica correções de ocupação
+  antes de escolher as amostras do regressor. Isso evita que um falso negativo corrigido para ativo
   receba incorretamente o valor de background.
 - O treinador conserva os valores ativos de uma casca de uma leaf (8 voxels)
   nas seis faces de cada domínio. Assim, as faces de domínios vizinhos usam
