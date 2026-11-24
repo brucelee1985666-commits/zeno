@@ -62,6 +62,7 @@ if (EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/NanoVDB.h"
     target_include_directories(zeno_znvds_nanovdb_cpu PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/../oldzenbase/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../zeno/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../include"
         "${ZENO_ZNVDS_CONVERTER_DIR}"
         "${ZENO_NANOVDB_UPSTREAM_ROOT}")
