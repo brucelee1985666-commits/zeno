@@ -44,7 +44,7 @@ else()
     message(STATUS "Matching NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
 endif()
 
-set(ZENO_NANOVDB_UPSTREAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream")
+set(ZENO_NANOVDB_UPSTREAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream/nanovdb")
 set(ZENO_ZNVDS_CONVERTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/neural_volume")
 
 # The OpenVDB FloatGrid exporter uses OpenVDB only; it must not be disabled
@@ -57,7 +57,7 @@ target_include_directories(zeno PRIVATE "${ZENO_ZNVDS_CONVERTER_DIR}")
 # NanoVDB API. Compile it in an isolated object target so these modern headers
 # never shadow the legacy NanoVDB headers used by OpenVDBToNanoVDB.cpp.
 list(FILTER PROJECT_SOURCE EXCLUDE REGEX "ZNVDSFileToNanoVDB\\.cpp$")
-set(ZENO_NANOVDB_UPSTREAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream")
+set(ZENO_NANOVDB_UPSTREAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream/nanovdb")
 set(ZENO_ZNVDS_CONVERTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/neural_volume")
 if (EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/NanoVDB.h"
     AND EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/tools/GridBuilder.h"
