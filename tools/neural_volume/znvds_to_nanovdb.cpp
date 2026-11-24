@@ -167,8 +167,11 @@ convertZnvdsToNanoVdb(const std::filesystem::path& path) {
         const int32_t ox=in.i32("leaf origin x");
         const int32_t oy=in.i32("leaf origin y");
         const int32_t oz=in.i32("leaf origin z");
-        if ((ox%8)||(oy%8)||(oz%8))
-            throw std::runtime_error("unaligned ZNVDS leaf origin");
+        if ((ox%8)||(oy%8)||(oz%8) ||
+            ox > std::numeric_limits<int32_t>::max()-7 ||
+            oy > std::numeric_limits<int32_t>::max()-7 ||
+            oz > std::numeric_limits<int32_t>::max()-7)
+            throw std::runtime_error("unaligned or out-of-range ZNVDS leaf origin");
         if (!seenLeaves.emplace(ox,oy,oz).second)
             throw std::runtime_error("duplicate ZNVDS leaf origin");
         const uint32_t count=in.u32("leaf active count");
