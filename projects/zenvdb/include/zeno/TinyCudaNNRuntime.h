@@ -38,7 +38,7 @@ public:
     const void* gridDevice() const;
     size_t bufferSize() const;
     uint64_t activeVoxelCount() const;
-    uint64_t preservedSourceTileCount() const;
+    uint64_t sourceActiveTileCount() const;
     void wait() const;
 private:
     struct Impl;
