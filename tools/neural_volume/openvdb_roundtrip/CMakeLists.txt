@@ -7,7 +7,9 @@ endif()
 
 # Use OpenVDB's own Find module to link the distro runtime. This avoids
 # rebuilding the full library while keeping real FloatGrid execution in CI.
-list(APPEND CMAKE_MODULE_PATH "${OPENVDB_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH
+    "${CMAKE_CURRENT_LIST_DIR}"
+    "${OPENVDB_SOURCE_DIR}/cmake")
 find_package(OpenVDB REQUIRED)
 
 add_executable(openvdb-floatgrid-roundtrip-smoke
