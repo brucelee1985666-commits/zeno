@@ -123,3 +123,12 @@ jobs:
             tools/neural_volume/nanovdb_cpu_reference_smoke.cpp \
             -o nanovdb-cpu-reference-smoke
           ./nanovdb-cpu-reference-smoke
+
+      - name: Compile and run end-to-end ZNVDS to NanoVDB CPU round-trip
+        run: |
+          g++ -std=c++17 -pthread -Wall -Wextra -Werror \
+            -isystem projects/zenvdb/nanovdb-upstream/nanovdb \
+            tools/neural_volume/znvds_to_nanovdb.cpp \
+            tools/neural_volume/znvds_to_nanovdb_smoke.cpp \
+            -o znvds-to-nanovdb-smoke
+          ./znvds-to-nanovdb-smoke
