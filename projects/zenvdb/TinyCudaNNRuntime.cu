@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <iterator>
 #include <stdexcept>
 #include <set>
 #include <type_traits>
