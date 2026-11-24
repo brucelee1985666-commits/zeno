@@ -47,14 +47,16 @@ Useful controls:
 
 ## Important limitations
 
-- This is an experimental encoder checkpoint, not a production NeuralVDB replacement.
-- `.znvm` is a portable little-endian binary container with tiny-cuda-nn model parameters and correction records. There is no C++ Zeno decoder yet.
+- This is an experimental hybrid encoder/decoder, not a production NeuralVDB replacement.
+- `.znvm` is a portable little-endian binary container with tiny-cuda-nn model parameters and correction records. A C++ reader and optional CUDA leaf decoder are present; the CUDA bridge is not yet integrated as a ZenoCompute/render node.
 - Exact occupancy reconstruction depends on matching tiny-cuda-nn inference behavior and numeric precision between encoding and decoding.
-- Values not covered by corrections are lossy within the requested tolerance.
+- Values not covered by corrections are lossy within the requested tolerance. Active values on the six domain-boundary voxel planes are stored exactly to avoid seams between adjacent local fields.
 - FloatGrid and linear/affine transforms only.
-- The first version retains the leaf block list and upper active tiles explicitly; it does not yet learn the parent-level VDB child/tile classifier. Domains are currently disjoint and are not blended, so boundary continuity is not yet guaranteed.
+- The VDB hierarchy is retained explicitly: active internal tiles remain native NanoVDB tiles, and leaf blocks are represented by local neural domains. The parent-level topology is not learned by a separate neural classifier; this is a deliberate first hybrid design, not full NeuralVDB parity.
+- The optional runtime can decode one leaf on demand and can build a device-resident NanoVDB FloatGrid. Building the full FloatGrid materializes decoded scalar values and therefore gives up much of the checkpoint's neural-memory savings; it is a compatibility/fallback path, not the compressed streaming path.
+- The decoder keeps up to two domain model pairs resident in an LRU cache. It is not thread-safe per instance.
 - Training requires an NVIDIA GPU, CUDA-enabled PyTorch and tiny-cuda-nn. The Python extension does not run on CPU.
-- The binary inspector validates container structure and counts; it does not prove model reconstruction quality.
+- CI validates the binary reader/parser, NanoVDB API and native tile topology, and performs a compile-only CUDA bridge check. No actual GPU training/inference, full Zeno build, renderer integration, or performance benchmark has been completed.
 
 ## Reproducibility and license
 
