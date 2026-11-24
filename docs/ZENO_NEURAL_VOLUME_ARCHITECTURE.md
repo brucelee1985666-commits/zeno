@@ -171,3 +171,52 @@ Não declarar vitória por razão de compressão isolada: NeuralVDB prioriza foo
 - Kim, Lee, Museth, NeuralVDB, ACM TOG 43(2), 2024: https://doi.org/10.1145/3641817
 - Código do Zeno: https://github.com/brucelee1985666-commits/zeno
 - OpenVDB/NanoVDB submódulo usado pelo fork: https://github.com/zenustech/openvdb/tree/015847945a09ff41db27fbd8602ae14b31e27293/nanovdb/nanovdb
+
+
+## Estado consolidado após a integração do decoder CUDA
+
+A implementação agora contém um caminho funcional em código para recriar redes
+tiny-cuda-nn a partir da configuração e dos parâmetros ZNVM, fazer inferência
+por lotes, decodificar leaves seletivamente e produzir um NanoVDB FloatGrid
+residente na GPU com topologia nativa de leaves e tiles internos. O decoder
+mantém apenas o domínio neural atualmente usado na GPU para limitar VRAM; a
+troca de domínio recria e reenvia os pesos. O caminho de construção NanoVDB
+ainda consulta a ocupação das leaves na CPU para montar a topologia, enquanto
+os valores escalares são mantidos em buffers GPU.
+
+### Correções de fidelidade e continuidade
+
+- A decodificação CPU agora aplica correções de ocupação antes de escolher as
+  amostras do regressor. Isso evita que um falso negativo corrigido para ativo
+  receba incorretamente o valor de background.
+- O treinador conserva os valores ativos de uma casca de uma leaf (8 voxels)
+  nas seis faces de cada domínio. Assim, as faces de domínios vizinhos usam
+  valores de origem exatos. O interior continua usando o regressor e correções
+  exatas apenas quando excede a tolerância.
+- Esta política é um fallback exato de fronteira, não blending entre redes.
+  Ela reduz o risco de seams entre domínios sem adicionar uma segunda rede ou
+  uma nova dependência.
+
+### Limites que continuam explícitos
+
+- A hierarquia espacial é a hierarquia VDB explícita preservada (tiles e
+  leaves) mais o particionamento em domínios neurais. Ainda não há uma
+  hierarquia neural multinível que aprenda a escolher resoluções/modelos em
+  diferentes níveis como no desenho completo do NeuralVDB.
+- O caminho NanoVDB reconstrói a topologia no host e copia máscaras de
+  ocupação leaf a leaf. É um primeiro bridge híbrido, não uma atualização
+  totalmente GPU-resident nem um caminho otimizado para streaming de frames.
+- A cache de redes é de um domínio ativo por decoder; chamadas concorrentes
+  precisam ser serializadas por instância.
+- O formato e o runtime continuam restritos a FloatGrid e ao backend/
+  configuração tiny-cuda-nn gravados no checkpoint.
+- A CI compila e executa testes CPU do formato e compila separadamente o
+  bridge CUDA sem exigir GPU. Isso não substitui inferência real em hardware,
+  round-trip contra OpenVDB, nem medições de compressão, qualidade, latência e
+  VRAM.
+- Warm-start temporal entre frames e integração como nó ZenoCompute/render
+  ainda não foram concluídos.
+
+Portanto, o resultado é um protótipo híbrido alinhado aos princípios centrais
+do NeuralVDB (topologia explícita, valores neurais locais e correções exatas),
+não uma reprodução integral ou uma alegação de paridade com o SDK NeuralVDB.
