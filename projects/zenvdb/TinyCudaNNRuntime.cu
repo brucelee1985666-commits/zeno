@@ -218,12 +218,21 @@ struct DecodedNeuralLeafDevice::Impl {
     uint8_t* occupancy = nullptr;
     float* values = nullptr;
     int* validationError = nullptr;
-    mutable bool checked = false;
+    float* logits = nullptr;
+    float* regressed = nullptr;
+    uint16_t* occupancyOffsets = nullptr;
+    uint16_t* exactOffsets = nullptr;
+    float* exactValues = nullptr;
     ~Impl() {
         if (stream) cudaStreamSynchronize(stream);
         if (occupancy) cudaFree(occupancy);
         if (values) cudaFree(values);
         if (validationError) cudaFree(validationError);
+        if (logits) cudaFree(logits);
+        if (regressed) cudaFree(regressed);
+        if (occupancyOffsets) cudaFree(occupancyOffsets);
+        if (exactOffsets) cudaFree(exactOffsets);
+        if (exactValues) cudaFree(exactValues);
         if (stream) cudaStreamDestroy(stream);
     }
 };
@@ -243,12 +252,15 @@ const void* DecodedNeuralLeafDevice::valuesDevice() const {
     if (!m_impl) throw std::logic_error("device leaf is not initialized");
     return m_impl->values;
 }
+void* DecodedNeuralLeafDevice::streamHandle() const {
+    if (!m_impl) throw std::logic_error("device leaf is not initialized");
+    return reinterpret_cast<void*>(m_impl->stream);
+}
 void DecodedNeuralLeafDevice::wait() const {
     if (!m_impl) throw std::logic_error("device leaf is not initialized");
     checkCuda(cudaStreamSynchronize(m_impl->stream), "synchronize decoded device leaf");
     int error = 0;
     checkCuda(cudaMemcpy(&error, m_impl->validationError, sizeof(error), cudaMemcpyDeviceToHost), "read decoded leaf validation status");
-    m_impl->checked = true;
     if (error == 1) throw std::runtime_error("leaf without a regressor is missing an exact active voxel value");
     if (error == 2) throw std::runtime_error("decoded active voxel value is not finite");
 }
@@ -454,16 +466,17 @@ DecodedNeuralLeafDevice NeuralVolumeDecoder::decodeLeafDevice(const std::array<i
     checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->validationError), sizeof(int)), "allocate decoded validation flag");
     checkCuda(cudaMemsetAsync(result.m_impl->validationError, 0, sizeof(int), result.m_impl->stream), "clear decoded validation flag");
 
-    DeviceBuffer<float> logits(512);
-    DeviceBuffer<float> regressed(512);
-    domain.classifier->inferDevice(points, logits.get());
-    if (domain.hasRegressor) domain.regressor->inferDevice(points, regressed.get());
+    checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->logits), 512 * sizeof(float)), "allocate classifier logits");
+    if (domain.hasRegressor)
+        checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->regressed), 512 * sizeof(float)), "allocate regressor predictions");
+    checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->occupancyOffsets), std::max<size_t>(1, corrections.occupancyOffsets.size()) * sizeof(uint16_t)), "allocate occupancy correction offsets");
+    checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->exactOffsets), std::max<size_t>(1, corrections.exactValueOffsets.size()) * sizeof(uint16_t)), "allocate exact-value offsets");
+    checkCuda(cudaMalloc(reinterpret_cast<void**>(&result.m_impl->exactValues), std::max<size_t>(1, corrections.exactValueOffsets.size()) * sizeof(float)), "allocate exact-value corrections");
+    domain.classifier->inferDevice(points, result.m_impl->logits);
+    if (domain.hasRegressor) domain.regressor->inferDevice(points, result.m_impl->regressed);
 
-    DeviceBuffer<uint16_t> occupancyOffsets(std::max<size_t>(1, corrections.occupancyOffsets.size()));
-    DeviceBuffer<uint16_t> exactOffsets(std::max<size_t>(1, corrections.exactValueOffsets.size()));
-    DeviceBuffer<float> exactValues(std::max<size_t>(1, corrections.exactValueOffsets.size()));
     if (!corrections.occupancyOffsets.empty())
-        checkCuda(cudaMemcpy(occupancyOffsets.get(), corrections.occupancyOffsets.data(), corrections.occupancyOffsets.size() * sizeof(uint16_t), cudaMemcpyHostToDevice), "upload occupancy corrections");
+        checkCuda(cudaMemcpy(result.m_impl->occupancyOffsets, corrections.occupancyOffsets.data(), corrections.occupancyOffsets.size() * sizeof(uint16_t), cudaMemcpyHostToDevice), "upload occupancy corrections");
     std::vector<uint16_t> exactOffsetHost;
     std::vector<float> exactValueHost;
     exactOffsetHost.reserve(corrections.exactValueOffsets.size());
@@ -473,16 +486,15 @@ DecodedNeuralLeafDevice NeuralVolumeDecoder::decodeLeafDevice(const std::array<i
         exactValueHost.push_back(correction.second);
     }
     if (!exactOffsetHost.empty()) {
-        checkCuda(cudaMemcpy(exactOffsets.get(), exactOffsetHost.data(), exactOffsetHost.size() * sizeof(uint16_t), cudaMemcpyHostToDevice), "upload exact-value offsets");
-        checkCuda(cudaMemcpy(exactValues.get(), exactValueHost.data(), exactValueHost.size() * sizeof(float), cudaMemcpyHostToDevice), "upload exact-value corrections");
+        checkCuda(cudaMemcpy(result.m_impl->exactOffsets, exactOffsetHost.data(), exactOffsetHost.size() * sizeof(uint16_t), cudaMemcpyHostToDevice), "upload exact-value offsets");
+        checkCuda(cudaMemcpy(result.m_impl->exactValues, exactValueHost.data(), exactValueHost.size() * sizeof(float), cudaMemcpyHostToDevice), "upload exact-value corrections");
     }
     assembleDecodedLeaf<<<2, 256, 0, result.m_impl->stream>>>(
-        logits.get(), regressed.get(), domain.hasRegressor, domain.valueCenter, domain.valueScale, ownedModel.background,
-        occupancyOffsets.get(), static_cast<uint32_t>(corrections.occupancyOffsets.size()),
-        exactOffsets.get(), exactValues.get(), static_cast<uint32_t>(corrections.exactValueOffsets.size()),
+        result.m_impl->logits, result.m_impl->regressed, domain.hasRegressor, domain.valueCenter, domain.valueScale, ownedModel.background,
+        result.m_impl->occupancyOffsets, static_cast<uint32_t>(corrections.occupancyOffsets.size()),
+        result.m_impl->exactOffsets, result.m_impl->exactValues, static_cast<uint32_t>(corrections.exactValueOffsets.size()),
         result.m_impl->occupancy, result.m_impl->values, result.m_impl->validationError);
     checkCuda(cudaGetLastError(), "assemble decoded device leaf");
-    result.wait();
     return result;
 }
 } // namespace zeno::neuralvolume
