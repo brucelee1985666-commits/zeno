@@ -16,7 +16,7 @@ def make_dataset(*, occupancy_override=None, trailing=b""):
         struct.pack("<IIQQQ", 1, 3, 1, 0, 2),
         struct.pack("<I", 4),
         b"test",
-        struct.pack("<ffff", 0.0, 1.0, 1.0, 1.0),
+        struct.pack("<Iffff", 2, 0.0, 1.0, 1.0, 1.0),
         struct.pack("<16d", 1.0, 0.0, 0.0, 0.0,
                     0.0, 1.0, 0.0, 0.0,
                     0.0, 0.0, 1.0, 0.0,
