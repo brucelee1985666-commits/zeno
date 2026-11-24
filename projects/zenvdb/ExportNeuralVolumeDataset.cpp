@@ -48,6 +48,13 @@ void writeF32LE(std::ostream& out, float value) {
     writeU32LE(out, bits);
 }
 
+void writeF64LE(std::ostream& out, double value) {
+    static_assert(sizeof(double) == sizeof(uint64_t), "ZNVDS requires 64-bit double");
+    uint64_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    writeU64LE(out, bits);
+}
+
 void writeString(std::ostream& out, const std::string& value) {
     if (value.size() > std::numeric_limits<uint32_t>::max()) {
         throw zeno::Exception("Neural volume grid name is too long");
@@ -73,6 +80,16 @@ struct ExportNeuralVolumeDataset : zeno::INode {
         const auto outputPath = std::filesystem::path(path);
         if (!outputPath.parent_path().empty()) {
             std::filesystem::create_directories(outputPath.parent_path());
+        }
+
+        const auto& transform = grid->m_grid->transform();
+        if (!transform.baseMap()->isLinear()) {
+            throw zeno::Exception(
+                "ExportNeuralVolumeDataset currently requires a linear/affine grid transform");
+        }
+        const auto affineMap = transform.baseMap()->getAffineMap();
+        if (!affineMap) {
+            throw zeno::Exception("Could not extract affine transform for neural volume dataset");
         }
 
         const auto& tree = grid->m_grid->tree();
@@ -103,7 +120,7 @@ struct ExportNeuralVolumeDataset : zeno::INode {
         const char magic[8] = {'Z','N','V','D','S','0','0','1'};
         out.write(magic, sizeof(magic));
         writeU32LE(out, 1u); // format version
-        writeU32LE(out, 1u); // flags: FloatGrid, index-space coordinates
+        writeU32LE(out, 3u); // flags: FloatGrid, index-space samples, affine transform
         writeU64LE(out, leafCount);
         writeU64LE(out, tileCount);
         writeU64LE(out, activeVoxelCount);
@@ -113,6 +130,12 @@ struct ExportNeuralVolumeDataset : zeno::INode {
         writeF32LE(out, static_cast<float>(voxelSize.x()));
         writeF32LE(out, static_cast<float>(voxelSize.y()));
         writeF32LE(out, static_cast<float>(voxelSize.z()));
+        const auto matrix = affineMap->getMat4();
+        for (int row = 0; row < 4; ++row) {
+            for (int column = 0; column < 4; ++column) {
+                writeF64LE(out, matrix(row, column));
+            }
+        }
 
         // Preserve active internal tiles explicitly. The neural model will
         // learn only the lower leaf-level topology and values in this first
