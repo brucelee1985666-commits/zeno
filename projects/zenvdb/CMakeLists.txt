@@ -42,6 +42,38 @@ else()
     message(STATUS "Matching NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
 endif()
 
+# The ZNVDS -> NanoVDB CPU converter uses a separately pinned upstream
+# NanoVDB API. Compile it in an isolated object target so these modern headers
+# never shadow the legacy NanoVDB headers used by OpenVDBToNanoVDB.cpp.
+list(FILTER PROJECT_SOURCE EXCLUDE REGEX "ZNVDSFileToNanoVDB\\.cpp$")
+set(ZENO_NANOVDB_UPSTREAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream")
+set(ZENO_ZNVDS_CONVERTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/neural_volume")
+if (EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/NanoVDB.h"
+    AND EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/tools/GridBuilder.h"
+    AND EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/tools/CreateNanoGrid.h"
+    AND EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/io/IO.h")
+    add_library(zeno_znvds_nanovdb_cpu OBJECT
+        ZNVDSFileToNanoVDB.cpp
+        "${ZENO_ZNVDS_CONVERTER_DIR}/znvds_to_nanovdb.cpp")
+    get_target_property(ZENO_EXISTING_INCLUDE_DIRS zeno INCLUDE_DIRECTORIES)
+    if (ZENO_EXISTING_INCLUDE_DIRS)
+        target_include_directories(zeno_znvds_nanovdb_cpu PRIVATE ${ZENO_EXISTING_INCLUDE_DIRS})
+    endif()
+    target_include_directories(zeno_znvds_nanovdb_cpu PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../oldzenbase/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../include"
+        "${ZENO_ZNVDS_CONVERTER_DIR}"
+        "${ZENO_NANOVDB_UPSTREAM_ROOT}")
+    target_compile_features(zeno_znvds_nanovdb_cpu PRIVATE cxx_std_17)
+    set_target_properties(zeno_znvds_nanovdb_cpu PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
+    target_sources(zeno PRIVATE $<TARGET_OBJECTS:zeno_znvds_nanovdb_cpu>)
+    message(STATUS "ZNVDS -> NanoVDB CPU Zeno node enabled")
+else()
+    message(STATUS "Pinned upstream NanoVDB headers unavailable: disabling ZNVDS -> NanoVDB CPU node")
+endif()
+
 # Add sources only after the optional NanoVDB files have been filtered.
 target_sources(zeno PRIVATE ${PROJECT_SOURCE})
 
