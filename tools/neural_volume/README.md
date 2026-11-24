@@ -53,6 +53,18 @@ converts it with `createNanoGrid`, and checks active leaf values and an active
 tile on the CPU. This verifies the upstream NanoVDB CPU data path, not the
 tiny-cuda-nn inference path.
 
+The repository also contains a CPU-only end-to-end converter:
+
+- `znvds_to_nanovdb.cpp` parses and validates ZNVDS v1, reconstructs active leaf
+  voxels and active internal tiles with NanoVDB's upstream CPU `GridBuilder`,
+  then emits a host `NanoVDB FloatGrid` with `createNanoGrid`.
+- The conversion preserves the stored affine index-to-world transform, grid
+  name, grid class, background, active topology and scalar values.
+- CI writes a synthetic ZNVDS fixture and verifies voxel occupancy/values, an
+  active tile, grid class/name and a non-uniform affine transform after conversion.
+- This is a lossless CPU reference path for the ZNVDS interchange format; it is
+  not a neural decoder and does not execute tiny-cuda-nn.
+
 The tiny-cuda-nn trainer remains optional and NVIDIA-only. If no compatible GPU
 is available, use the CPU audit and CPU NanoVDB tests; do not substitute a
 CPU mock and call it a neural training/inference result.
