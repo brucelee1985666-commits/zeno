@@ -640,7 +640,7 @@ uint64_t NanoVDBDeviceGrid::activeVoxelCount() const {
     if (!m_impl) throw std::logic_error("NanoVDB device grid is not initialized");
     return m_impl->activeVoxels;
 }
-uint64_t NanoVDBDeviceGrid::preservedSourceTileCount() const {
+uint64_t NanoVDBDeviceGrid::sourceActiveTileCount() const {
     if (!m_impl) throw std::logic_error("NanoVDB device grid is not initialized");
     return m_impl->sourceTiles;
 }
