@@ -187,3 +187,29 @@ The trainer reports IoU, precision/recall, classifier accuracy, correction
 counts and pre-correction regression RMSE. Do not compare only checkpoint size:
 the final codec must include decoder/model memory, exact corrections, tiles,
 metadata and runtime buffers in its footprint.
+
+
+### Actual Zeno graph-node integration (headless)
+
+The optional CMake switch `ZENO_BUILD_NEURAL_VOLUME_NODE_TESTS=ON` builds a
+headless integration executable against the real Zeno runtime. A separate
+fixture-writer executable first writes an independent `.vdb` file to disk.
+The test then constructs and executes actual Zeno graph instances:
+
+1. `ReadVDB` loads the independent disk file as a FloatGrid.
+2. `ExportNeuralVolumeDataset` consumes that graph input and writes `.znvds`.
+3. `ZNVDSFileToNanoVDB` consumes the written dataset and writes `.nvdb`.
+4. The test reopens the source and output files independently and checks active
+   voxel/tile occupancy, scalar values, grid name/class and affine transform.
+
+This is a real headless Zeno runtime test, not merely a direct call to the
+serializer or converter. It does not require the editor, display server, CUDA,
+or an NVIDIA GPU. The independent fixture is a synthetic fog volume; it is
+not a user-supplied production scene.
+
+The build is exercised by the `zeno-node-runtime` GitHub Actions job. For
+remote graphical inspection on a phone or browser, open
+[the Colab Zeno node graph + visualization notebook](https://colab.research.google.com/github/brucelee1985666-commits/zeno/blob/zeno-master-clean-copy/tools/neural_volume/colab_zeno_node_graph_visual_test.ipynb).
+It builds and runs the same graph-node test, then plots the exported density
+slice and active-voxel cloud. Those plots are dataset diagnostics, not a
+final Zeno volumetric render.
