@@ -85,7 +85,7 @@ The CLI writes a standard NanoVDB file. It does not require CUDA or tiny-cuda-nn
 
 ### Real OpenVDB FloatGrid end-to-end CPU proof
 
-The CPU integration test now constructs an actual `openvdb::FloatGrid` in C++,
+The CPU integration test constructs an actual `openvdb::FloatGrid` in C++,
 including active leaf voxels, active tiles at all three tree levels, a non-uniform
 affine transform, grid class, name and background. It passes that in-memory grid
 through the same reusable serializer called by the Zeno
@@ -95,11 +95,18 @@ serialized file with NanoVDB's reader, and compares every active OpenVDB value
 and tile against the reloaded NanoVDB grid, as well as metadata and the
 index-to-world transform.
 
-Run it on a CPU-only machine with the pinned OpenVDB and NanoVDB submodules:
+The runtime smoke links against the Ubuntu `libopenvdb-dev` package to avoid
+rebuilding the full OpenVDB library in CI. Separately, CI syntax-compiles the
+Zeno exporter node and shared serializer against the fork's pinned OpenVDB
+headers, so the runtime test and production-header compatibility are checked
+as distinct layers.
+
+Run it on a CPU-only machine with OpenVDB development headers and the pinned
+NanoVDB submodule:
 
 ```bash
+sudo apt-get install libopenvdb-dev pkg-config
 cmake -S tools/neural_volume/openvdb_roundtrip -B build-openvdb-floatgrid \
-  -DOPENVDB_SOURCE_DIR="$PWD/projects/zenvdb/openvdb" \
   -DNANOVDB_INCLUDE_DIR="$PWD/projects/zenvdb/nanovdb-upstream/nanovdb"
 cmake --build build-openvdb-floatgrid --target openvdb-floatgrid-roundtrip-smoke -j2
 ./build-openvdb-floatgrid/openvdb-floatgrid-roundtrip-smoke
