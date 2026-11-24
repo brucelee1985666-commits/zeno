@@ -65,8 +65,10 @@ jobs:
             exit 1
           fi
           VERSION_INCLUDE_DIR=$(dirname "$VERSION_HEADER")
+          VERSION_PARENT_DIR=$(dirname "$VERSION_INCLUDE_DIR")
           g++ -std=c++17 -fsyntax-only \
             -I"$VERSION_INCLUDE_DIR" \
+            -I"$VERSION_PARENT_DIR" \
             -Iprojects/zenvdb/openvdb/openvdb \
             -Iprojects/zenvdb/openvdb/nanovdb \
             tools/neural_volume/nanovdb_api_smoke.cpp
