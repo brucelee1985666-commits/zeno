@@ -17,7 +17,7 @@ int main() {
         nanovdb::Coord(0, 0, 0),       // active leaf voxel
         nanovdb::Coord(64, 0, 0),      // level-1 tile
         nanovdb::Coord(256, 0, 0),     // level-2 tile
-        nanovdb::Coord(1024, 0, 0)     // level-3/root tile
+        nanovdb::Coord(4096, 0, 0)     // level-3/root tile
     };
 
     source.setValue(probes[0], 1u);
