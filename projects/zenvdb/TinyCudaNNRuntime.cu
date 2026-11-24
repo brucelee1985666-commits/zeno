@@ -7,6 +7,15 @@
 #include <limits>
 #include <stdexcept>
 #include <utility>
+#if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
+#include <cub/cub.cuh>
+#include <nanovdb/NanoVDB.h>
+#include <nanovdb/GridHandle.h>
+#include <nanovdb/cuda/Buffer.h>
+#include <nanovdb/tools/cuda/PointsToGrid.cuh>
+#include <nanovdb/tools/cuda/IndexToGrid.cuh>
+#include <nanovdb/tools/cuda/GridChecksum.cuh>
+#endif
 namespace zeno::neuralvolume {
 namespace {
 void checkCuda(cudaError_t status, const char* operation) {
@@ -497,5 +506,238 @@ DecodedNeuralLeafDevice NeuralVolumeDecoder::decodeLeafDevice(const std::array<i
         result.m_impl->occupancy, result.m_impl->values, result.m_impl->validationError);
     checkCuda(cudaGetLastError(), "assemble decoded device leaf");
     return result;
+}
+
+#if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
+namespace {
+struct Matrix4dRows {
+    double row[4][4]{};
+    const double* operator[](size_t i) const { return row[i]; }
+    double* operator[](size_t i) { return row[i]; }
+};
+
+nanovdb::Map makeNanoMap(const NeuralVolumeModel& model) {
+    Matrix4dRows matrix, inverse;
+    for (size_t r = 0; r < 4; ++r) {
+        for (size_t c = 0; c < 4; ++c) {
+            const double v = model.indexToWorld[r * 4 + c];
+            if (!std::isfinite(v)) throw std::runtime_error("ZNVM affine transform contains a non-finite value");
+            matrix[r][c] = v;
+        }
+    }
+    if (std::abs(matrix[0][3]) > 1e-10 || std::abs(matrix[1][3]) > 1e-10 ||
+        std::abs(matrix[2][3]) > 1e-10 || std::abs(matrix[3][3] - 1.0) > 1e-10) {
+        throw std::runtime_error("ZNVM affine transform is not in the supported affine row-vector form");
+    }
+    const double a = matrix[0][0], b = matrix[0][1], c = matrix[0][2];
+    const double d = matrix[1][0], e = matrix[1][1], f = matrix[1][2];
+    const double g = matrix[2][0], h = matrix[2][1], i = matrix[2][2];
+    const double det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    if (!std::isfinite(det) || std::abs(det) < 1e-18) {
+        throw std::runtime_error("ZNVM affine transform is singular");
+    }
+    const double invDet = 1.0 / det;
+    inverse[0][0] =  (e * i - f * h) * invDet;
+    inverse[0][1] =  (c * h - b * i) * invDet;
+    inverse[0][2] =  (b * f - c * e) * invDet;
+    inverse[1][0] =  (f * g - d * i) * invDet;
+    inverse[1][1] =  (a * i - c * g) * invDet;
+    inverse[1][2] =  (c * d - a * f) * invDet;
+    inverse[2][0] =  (d * h - e * g) * invDet;
+    inverse[2][1] =  (b * g - a * h) * invDet;
+    inverse[2][2] =  (a * e - b * d) * invDet;
+    nanovdb::Map map;
+    map.set(matrix, inverse);
+    return map;
+}
+
+__global__ void appendActiveLeafVoxels(
+    const uint8_t* occupancy, const float* values,
+    int32_t ox, int32_t oy, int32_t oz,
+    nanovdb::Coord* coordsOut, float* valuesOut,
+    uint64_t capacity, unsigned long long* count, int* error) {
+    const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= 512 || occupancy[i] == 0) return;
+    const unsigned long long dst = atomicAdd(count, 1ull);
+    if (dst >= capacity) {
+        atomicExch(error, 1);
+        return;
+    }
+    const int32_t x = ox + static_cast<int32_t>(i >> 6);
+    const int32_t y = oy + static_cast<int32_t>((i >> 3) & 7);
+    const int32_t z = oz + static_cast<int32_t>(i & 7);
+    coordsOut[dst] = nanovdb::Coord(x, y, z);
+    valuesOut[dst] = values[i];
+}
+
+__global__ void initializeSidecar(float* sidecar, float background) {
+    if (blockIdx.x == 0 && threadIdx.x == 0) sidecar[0] = background;
+}
+
+__global__ void scatterLeafValuesToIndexGrid(
+    const nanovdb::NanoGrid<nanovdb::ValueOnIndex>* indexGrid,
+    const nanovdb::Coord* coords, const float* values,
+    uint64_t count, float* sidecar, int* error) {
+    const uint64_t i = static_cast<uint64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (i >= count) return;
+    auto accessor = indexGrid->getAccessor();
+    const uint64_t index = accessor.getValue(coords[i]);
+    if (index == 0 || index > count) {
+        atomicExch(error, 2);
+        return;
+    }
+    sidecar[index] = values[i];
+}
+
+__global__ void setNanoGridClass(nanovdb::NanoGrid<float>* grid, uint32_t gridClass) {
+    if (blockIdx.x == 0 && threadIdx.x == 0) {
+        grid->data()->mGridClass = static_cast<nanovdb::GridClass>(gridClass);
+    }
+}
+} // namespace
+
+struct NanoVDBDeviceGrid::Impl {
+    using BufferT = nanovdb::cuda::Buffer<std::byte>;
+    std::unique_ptr<nanovdb::GridHandle<BufferT>> handle;
+    cudaStream_t stream = nullptr;
+    uint64_t activeVoxels = 0;
+    uint64_t sourceTiles = 0;
+    ~Impl() {
+        if (stream) cudaStreamSynchronize(stream);
+        handle.reset();
+        if (stream) cudaStreamDestroy(stream);
+    }
+};
+#else
+struct NanoVDBDeviceGrid::Impl {
+    uint64_t activeVoxels = 0;
+    uint64_t sourceTiles = 0;
+};
+#endif
+
+NanoVDBDeviceGrid::NanoVDBDeviceGrid() = default;
+NanoVDBDeviceGrid::~NanoVDBDeviceGrid() = default;
+NanoVDBDeviceGrid::NanoVDBDeviceGrid(NanoVDBDeviceGrid&&) noexcept = default;
+NanoVDBDeviceGrid& NanoVDBDeviceGrid::operator=(NanoVDBDeviceGrid&&) noexcept = default;
+const void* NanoVDBDeviceGrid::gridDevice() const {
+#if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
+    if (!m_impl || !m_impl->handle) throw std::logic_error("NanoVDB device grid is not initialized");
+    return m_impl->handle->template deviceGrid<float>();
+#else
+    throw std::runtime_error("NanoVDB CUDA PointsToGrid/IndexToGrid headers were not available when Zeno was configured");
+#endif
+}
+size_t NanoVDBDeviceGrid::bufferSize() const {
+#if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
+    if (!m_impl || !m_impl->handle) throw std::logic_error("NanoVDB device grid is not initialized");
+    return m_impl->handle->bufferSize();
+#else
+    throw std::runtime_error("NanoVDB CUDA builders are unavailable in this build");
+#endif
+}
+uint64_t NanoVDBDeviceGrid::activeVoxelCount() const {
+    if (!m_impl) throw std::logic_error("NanoVDB device grid is not initialized");
+    return m_impl->activeVoxels;
+}
+uint64_t NanoVDBDeviceGrid::preservedSourceTileCount() const {
+    if (!m_impl) throw std::logic_error("NanoVDB device grid is not initialized");
+    return m_impl->sourceTiles;
+}
+void NanoVDBDeviceGrid::wait() const {
+#if defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
+    if (!m_impl || !m_impl->handle) throw std::logic_error("NanoVDB device grid is not initialized");
+    checkCuda(cudaStreamSynchronize(m_impl->stream), "synchronize NanoVDB device grid");
+#else
+    throw std::runtime_error("NanoVDB CUDA builders are unavailable in this build");
+#endif
+}
+
+NanoVDBDeviceGrid NeuralVolumeDecoder::buildNanoVDBDevice() {
+    if (!m_impl) throw std::logic_error("neural volume decoder is not initialized");
+#if !defined(ZENO_WITH_NANOVDB_CUDA_BUILDERS)
+    throw std::runtime_error("This NanoVDB header set lacks CUDA PointsToGrid/IndexToGrid; enable a NanoVDB revision that provides both headers and reconfigure Zeno");
+#else
+    const auto& model = m_impl->model;
+    if (model.partial) throw std::invalid_argument("cannot build a complete NanoVDB grid from a partial ZNVM checkpoint");
+    if (model.sourceActiveVoxels == 0) {
+        throw std::invalid_argument("NanoVDB GPU bridge currently requires at least one active leaf voxel; active internal tiles are retained separately");
+    }
+    if (model.sourceActiveVoxels > std::numeric_limits<size_t>::max() / sizeof(nanovdb::Coord) ||
+        model.sourceActiveVoxels > std::numeric_limits<size_t>::max() / sizeof(float)) {
+        throw std::overflow_error("ZNVM active voxel count exceeds addressable GPU buffer size");
+    }
+
+    NanoVDBDeviceGrid output;
+    output.m_impl = std::make_unique<NanoVDBDeviceGrid::Impl>();
+    output.m_impl->activeVoxels = model.sourceActiveVoxels;
+    output.m_impl->sourceTiles = model.activeTiles.size();
+    checkCuda(cudaStreamCreateWithFlags(&output.m_impl->stream, cudaStreamNonBlocking), "create NanoVDB build stream");
+    const cudaStream_t stream = output.m_impl->stream;
+    const size_t capacity = static_cast<size_t>(model.sourceActiveVoxels);
+    DeviceBuffer<nanovdb::Coord> dCoords(capacity);
+    DeviceBuffer<float> dValues(capacity);
+    DeviceBuffer<unsigned long long> dCount(1);
+    DeviceBuffer<int> dError(1);
+    checkCuda(cudaMemsetAsync(dCount.get(), 0, sizeof(unsigned long long), stream), "clear NanoVDB active count");
+    checkCuda(cudaMemsetAsync(dError.get(), 0, sizeof(int), stream), "clear NanoVDB bridge error");
+
+    // Decode one neural leaf at a time. Each append is completed before its
+    // owner releases the leaf buffers; only compacted active voxels persist.
+    for (const auto& domain : model.domains) {
+        for (const auto& leafRecord : domain.leaves) {
+            auto leaf = this->decodeLeafDevice(leafRecord.origin);
+            leaf.wait();
+            appendActiveLeafVoxels<<<2, 256, 0, static_cast<cudaStream_t>(leaf.streamHandle())>>>(
+                static_cast<const uint8_t*>(leaf.occupancyDevice()),
+                static_cast<const float*>(leaf.valuesDevice()),
+                leaf.origin()[0], leaf.origin()[1], leaf.origin()[2],
+                dCoords.get(), dValues.get(), model.sourceActiveVoxels, dCount.get(), dError.get());
+            checkCuda(cudaGetLastError(), "append active neural leaf voxels");
+            checkCuda(cudaStreamSynchronize(static_cast<cudaStream_t>(leaf.streamHandle())), "finish neural leaf append");
+        }
+    }
+
+    unsigned long long activeCount = 0;
+    int bridgeError = 0;
+    checkCuda(cudaMemcpy(&activeCount, dCount.get(), sizeof(activeCount), cudaMemcpyDeviceToHost), "read NanoVDB active voxel count");
+    checkCuda(cudaMemcpy(&bridgeError, dError.get(), sizeof(bridgeError), cudaMemcpyDeviceToHost), "read NanoVDB bridge status");
+    if (bridgeError != 0) throw std::runtime_error("NanoVDB bridge active voxel buffer overflow");
+    if (activeCount != model.sourceActiveVoxels) {
+        throw std::runtime_error("decoded active voxel count does not match ZNVM source topology");
+    }
+
+    // Reuse NanoVDB's own GPU builders: active coordinates -> ValueOnIndex
+    // topology -> FloatGrid values. No OpenVDB grid or full voxel array is
+    // reconstructed on the CPU.
+    const auto map = makeNanoMap(model);
+    using BufferT = nanovdb::cuda::Buffer<std::byte>;
+    nanovdb::tools::cuda::PointsToGrid<nanovdb::ValueOnIndex> pointBuilder(map, stream);
+    pointBuilder.setGridName(model.gridName.empty() ? "ZenoNeuralVolume" : model.gridName);
+    auto indexHandle = pointBuilder.getHandle(dCoords.get(), activeCount, BufferT());
+    auto* indexGrid = indexHandle.template deviceGrid<nanovdb::ValueOnIndex>();
+    if (!indexGrid) throw std::runtime_error("NanoVDB PointsToGrid did not produce a ValueOnIndex grid");
+
+    DeviceBuffer<float> dSidecar(static_cast<size_t>(activeCount) + 1);
+    initializeSidecar<<<1, 1, 0, stream>>>(dSidecar.get(), model.background);
+    checkCuda(cudaGetLastError(), "initialize NanoVDB value sidecar");
+    scatterLeafValuesToIndexGrid<<<static_cast<unsigned>((activeCount + 255) / 256), 256, 0, stream>>>(
+        indexGrid, dCoords.get(), dValues.get(), activeCount, dSidecar.get(), dError.get());
+    checkCuda(cudaGetLastError(), "scatter neural values into NanoVDB index order");
+    nanovdb::tools::cuda::IndexToGrid<nanovdb::ValueOnIndex> converter(indexGrid, stream);
+    converter.setGridName(model.gridName.empty() ? "ZenoNeuralVolume" : model.gridName);
+    auto valueHandle = converter.template getHandle<float>(dSidecar.get(), BufferT());
+    checkCuda(cudaStreamSynchronize(stream), "finish NanoVDB IndexToGrid conversion");
+
+    auto* valueGrid = const_cast<nanovdb::NanoGrid<float>*>(valueHandle.template deviceGrid<float>());
+    if (!valueGrid) throw std::runtime_error("NanoVDB IndexToGrid did not produce a FloatGrid");
+    if (model.gridClass < static_cast<uint32_t>(nanovdb::GridClass::End)) {
+        setNanoGridClass<<<1, 1, 0, stream>>>(valueGrid, model.gridClass);
+        checkCuda(cudaGetLastError(), "set NanoVDB grid class");
+        nanovdb::tools::cuda::updateChecksum(reinterpret_cast<nanovdb::GridData*>(valueGrid->data()), stream);
+    }
+    checkCuda(cudaStreamSynchronize(stream), "finalize NanoVDB device grid");
+    output.m_impl->handle = std::make_unique<nanovdb::GridHandle<BufferT>>(std::move(valueHandle));
+    return output;
+#endif
 }
 } // namespace zeno::neuralvolume
