@@ -16,9 +16,13 @@ column-major as required by `tcnn::cpp::Module::inference`.
 `NeuralVolumeDecoder` takes ownership of a complete `NeuralVolumeModel`.
 Pass the parsed model with `std::move(model)` to avoid duplicating its CPU
 checkpoint arrays. It indexes domain keys and leaf origins, but does not load
-every domain's network onto the GPU. Only the requested leaf is decoded, and
-only the currently used domain's classifier/regressor weights remain resident.
-Switching domains replaces that active runtime.
+every domain's network onto the GPU. Only the requested leaf is decoded. A
+two-entry least-recently-used domain cache keeps the classifier/regressor
+weights for the current and most recently used domains resident; accessing a
+third domain evicts the least-recently used pair. This reduces repeated model
+construction and parameter uploads when traversal alternates across a domain
+boundary, while bounding neural-weight VRAM to at most two domains per
+decoder.
 
 For each requested leaf the decoder:
 1. Resolves the owning domain using floor division (including negative index
@@ -46,9 +50,9 @@ direct NanoVDB GPU-grid writer, a ZenoCompute device object, or a renderer node.
 The caller can inspect the original source metadata, affine transform, and
 preserved active tiles through `sourceModel()`. A subsequent integration must
 stream these device leaves into a GPU-resident NanoVDB/volume representation
-without expanding the full tree on the host. A decoder instance is not thread-safe because it maintains one
-active domain runtime; serialize calls per instance or use one instance per
-worker.
+without expanding the full tree on the host. A decoder instance is not thread-safe because its two-entry domain cache and
+tiny-cuda-nn modules are mutable; serialize calls per instance or use one
+instance per worker.
 
 The checkpoint format currently stores one shared model configuration for
 classifier and regressor networks; this is valid because the trainer creates
@@ -149,3 +153,15 @@ auto* grid = static_cast<const nanovdb::NanoGrid<float>*>(deviceGrid.gridDevice(
 
 The API returns a device-only grid handle; it does not write a `.nvdb` file or
 register a Zeno graph node. Those are separate integration tasks.
+
+
+## Bounded multi-domain residency
+
+The decoder now uses a two-entry LRU cache for domain runtimes. This is a
+bounded working-set optimization, not a new neural hierarchy: each domain
+still owns its own local classifier and optional regressor. The cache avoids
+recreating networks and uploading parameters when traversal revisits either
+of the two most recently used domains. A third distinct domain evicts the
+least-recently used runtime, keeping memory bounded. The cache capacity is
+currently a compile-time constant and should only become configurable after
+VRAM measurements on target GPUs.
