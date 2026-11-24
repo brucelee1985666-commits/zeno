@@ -148,12 +148,25 @@ jobs:
           cmake --build build-openvdb-floatgrid --target openvdb-floatgrid-roundtrip-smoke -j2
           ./build-openvdb-floatgrid/openvdb-floatgrid-roundtrip-smoke
 
-      - name: Compile Zeno ZNVDS conversion node against real Zeno headers
+      - name: Compile Zeno volume nodes against real Zeno and OpenVDB headers
         run: |
+          VERSION_HEADER=$(find build-openvdb -name version.h -print -quit)
+          if [ -z "$VERSION_HEADER" ]; then
+            echo "OpenVDB CMake did not generate version.h"
+            exit 1
+          fi
+          VERSION_INCLUDE_DIR=$(dirname "$VERSION_HEADER")
+          VERSION_PARENT_DIR=$(dirname "$VERSION_INCLUDE_DIR")
           g++ -std=c++17 -Wno-deprecated-declarations -fsyntax-only \
             -Izeno/include \
             -Iprojects/zenvdb/include \
             -Iprojects/oldzenbase/include \
             -Itools/neural_volume \
+            -I"$VERSION_INCLUDE_DIR" \
+            -I"$VERSION_PARENT_DIR" \
+            -Iprojects/zenvdb/openvdb/openvdb \
+            -Iprojects/zenvdb/openvdb/nanovdb \
             -isystem projects/zenvdb/nanovdb-upstream/nanovdb \
-            projects/zenvdb/ZNVDSFileToNanoVDB.cpp
+            projects/zenvdb/ZNVDSFileToNanoVDB.cpp \
+            projects/zenvdb/ExportNeuralVolumeDataset.cpp \
+            tools/neural_volume/openvdb_floatgrid_to_znvds.cpp
