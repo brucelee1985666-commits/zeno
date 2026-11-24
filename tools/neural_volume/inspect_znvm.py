@@ -135,12 +135,15 @@ def inspect_znvm(path: str | Path) -> dict:
 
             leaf_count = u32(stream, f"domain[{domain_index}] leaf count")
             encoded_leaf_count += leaf_count
+            observed_domain_occ_corrections = 0
+            observed_domain_value_corrections = 0
             for leaf_index in range(leaf_count):
                 for axis in range(3):
                     i32(stream, f"leaf[{leaf_index}] origin[{axis}]")
                 occ_count = u32(stream, f"leaf[{leaf_index}] occupancy correction count")
                 if occ_count > 512:
                     raise ModelError("occupancy correction count exceeds leaf capacity")
+                observed_domain_occ_corrections += occ_count
                 seen_occ = set()
                 for _ in range(occ_count):
                     offset = u16(stream, "occupancy correction offset")
@@ -151,6 +154,7 @@ def inspect_znvm(path: str | Path) -> dict:
                 val_count = u32(stream, f"leaf[{leaf_index}] value correction count")
                 if val_count > 512:
                     raise ModelError("value correction count exceeds leaf capacity")
+                observed_domain_value_corrections += val_count
                 seen_values = set()
                 for _ in range(val_count):
                     offset = u16(stream, "value correction offset")
