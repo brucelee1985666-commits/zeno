@@ -26,6 +26,25 @@ struct DecodedNeuralLeaf {
     std::array<uint8_t, 512> occupancy{};
     std::array<float, 512> values{};
 };
+class NanoVDBDeviceGrid {
+public:
+    NanoVDBDeviceGrid();
+    ~NanoVDBDeviceGrid();
+    NanoVDBDeviceGrid(NanoVDBDeviceGrid&&) noexcept;
+    NanoVDBDeviceGrid& operator=(NanoVDBDeviceGrid&&) noexcept;
+    NanoVDBDeviceGrid(const NanoVDBDeviceGrid&) = delete;
+    NanoVDBDeviceGrid& operator=(const NanoVDBDeviceGrid&) = delete;
+    // Opaque pointer to a device-resident nanovdb::NanoGrid<float>.
+    const void* gridDevice() const;
+    size_t bufferSize() const;
+    uint64_t activeVoxelCount() const;
+    uint64_t preservedSourceTileCount() const;
+    void wait() const;
+private:
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+    friend class NeuralVolumeDecoder;
+};
 class DecodedNeuralLeafDevice {
 public:
     DecodedNeuralLeafDevice();
@@ -61,6 +80,10 @@ public:
     bool hasLeaf(const std::array<int32_t, 3>& leafOrigin) const;
     DecodedNeuralLeaf decodeLeaf(const std::array<int32_t, 3>& leafOrigin);
     DecodedNeuralLeafDevice decodeLeafDevice(const std::array<int32_t, 3>& leafOrigin);
+    // Builds one device-resident NanoVDB FloatGrid from all neural leaf records.
+    // The original active internal tiles remain available through sourceModel();
+    // this first bridge currently builds the leaf-voxel topology only.
+    NanoVDBDeviceGrid buildNanoVDBDevice();
 private:
     struct Impl;
     std::unique_ptr<Impl> m_impl;
