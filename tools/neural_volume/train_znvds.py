@@ -256,19 +256,25 @@ def encode_domain(key, leaves, args):
         boundary_exact_voxels = 0
         for leaf_index, leaf in enumerate(leaves):
             corrections = []
-            # Each domain is an independent local neural field. Preserve a
-            # one-leaf exact-value shell at its six faces so adjacent domains
-            # cannot expose a value discontinuity at their shared boundary.
-            boundary_leaf = False
-            for axis in range(3):
-                local_origin = int(leaf["origin"][axis] - domain_origin[axis])
-                if local_origin < 8 or local_origin + 8 > args.domain_size - 8:
-                    boundary_leaf = True
+            # Each domain is an independent local neural field. Preserve
+            # only the six exact boundary voxel planes, not whole boundary
+            # leaves. Adjacent domains therefore share exact source samples at
+            # their interface with a much smaller compression penalty.
+            leaf_origin_local = [
+                int(leaf["origin"][axis] - domain_origin[axis]) for axis in range(3)
+            ]
             for offset, exact_value in leaf["values"]:
+                local_x = leaf_origin_local[0] + (int(offset) >> 6)
+                local_y = leaf_origin_local[1] + ((int(offset) >> 3) & 7)
+                local_z = leaf_origin_local[2] + (int(offset) & 7)
+                boundary_voxel = any(
+                    coordinate == 0 or coordinate == args.domain_size - 1
+                    for coordinate in (local_x, local_y, local_z)
+                )
                 error = abs(float(pred_values[value_cursor]) - exact_value)
-                if boundary_leaf or error > args.value_tolerance:
+                if boundary_voxel or error > args.value_tolerance:
                     corrections.append((int(offset), float(exact_value)))
-                    if boundary_leaf:
+                    if boundary_voxel:
                         boundary_exact_voxels += 1
                 value_cursor += 1
             value_corrections[leaf_index] = corrections
