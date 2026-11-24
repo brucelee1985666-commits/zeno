@@ -42,6 +42,14 @@ else()
     message(STATUS "Matching NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
 endif()
 
+# The OpenVDB FloatGrid exporter is a reusable CPU serializer used by
+# ExportNeuralVolumeDataset. It is linked with the same OpenVDB target/ABI.
+if (ZENO_NANOVDB_INCLUDE_DIR)
+    target_sources(zeno PRIVATE
+        "${ZENO_ZNVDS_CONVERTER_DIR}/openvdb_floatgrid_to_znvds.cpp")
+    target_include_directories(zeno PRIVATE "${ZENO_ZNVDS_CONVERTER_DIR}")
+endif()
+
 # The ZNVDS -> NanoVDB CPU converter uses a separately pinned upstream
 # NanoVDB API. Compile it in an isolated object target so these modern headers
 # never shadow the legacy NanoVDB headers used by OpenVDBToNanoVDB.cpp.
@@ -54,8 +62,6 @@ if (EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/NanoVDB.h"
     AND EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/io/IO.h")
     add_library(zeno_znvds_nanovdb_cpu OBJECT
         ZNVDSFileToNanoVDB.cpp
-        ExportNeuralVolumeDataset.cpp
-        "${ZENO_ZNVDS_CONVERTER_DIR}/openvdb_floatgrid_to_znvds.cpp"
         "${ZENO_ZNVDS_CONVERTER_DIR}/znvds_to_nanovdb.cpp")
     get_target_property(ZENO_EXISTING_INCLUDE_DIRS zeno INCLUDE_DIRECTORIES)
     if (ZENO_EXISTING_INCLUDE_DIRS)
