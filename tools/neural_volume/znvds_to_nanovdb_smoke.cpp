@@ -52,6 +52,8 @@ int main() {
         if(!grid->tree().isActive(tileProbe) ||
            std::abs(grid->tree().getValue(tileProbe)-2.5f)>1e-6f)
             throw std::runtime_error("round-trip lost active tile");
+        if(std::abs(grid->tree().getValue(nanovdb::Coord(100000,100000,100000)))>1e-6f)
+            throw std::runtime_error("round-trip changed grid background");
         if(grid->gridClass()!=nanovdb::GridClass::FogVolume)
             throw std::runtime_error("round-trip changed grid class");
         if(std::string(grid->gridName())!="znvds-roundtrip")
@@ -60,6 +62,16 @@ int main() {
         if(std::abs(world[0]+6.0)>1e-9 || std::abs(world[1]-44.0)>1e-9 ||
            std::abs(world[2]-103.0)>1e-9)
             throw std::runtime_error("round-trip changed affine transform");
+        // The C++ parser must reject a truncated file, not silently emit a partial grid.
+        const auto badPath=std::filesystem::temp_directory_path()/"znvds-to-nanovdb-truncated.znvds";
+        std::filesystem::copy_file(path,badPath,std::filesystem::copy_options::overwrite_existing);
+        const auto bytes=std::filesystem::file_size(badPath);
+        std::filesystem::resize_file(badPath,bytes-1);
+        bool rejected=false;
+        try { (void)zeno::neural_volume::convertZnvdsToNanoVdb(badPath); }
+        catch (const std::exception&) { rejected=true; }
+        std::filesystem::remove(badPath);
+        if(!rejected) throw std::runtime_error("converter accepted a truncated ZNVDS file");
         std::filesystem::remove(path);
         std::cout<<"ZNVDS -> NanoVDB CPU round-trip passed: values, occupancy, active tile, class, name, affine transform\n";
         return 0;
