@@ -244,6 +244,11 @@ NeuralVolumeDecoder::~NeuralVolumeDecoder() = default;
 NeuralVolumeDecoder::NeuralVolumeDecoder(NeuralVolumeDecoder&&) noexcept = default;
 NeuralVolumeDecoder& NeuralVolumeDecoder::operator=(NeuralVolumeDecoder&&) noexcept = default;
 
+const NeuralVolumeModel& NeuralVolumeDecoder::sourceModel() const {
+    if (!m_impl) throw std::logic_error("neural volume decoder is not initialized");
+    return m_impl->model;
+}
+
 bool NeuralVolumeDecoder::hasLeaf(const std::array<int32_t, 3>& origin) const {
     return m_impl && m_impl->leaves.find(origin) != m_impl->leaves.end();
 }
