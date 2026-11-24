@@ -115,3 +115,11 @@ jobs:
             tools/neural_volume/nanovdb_native_tiles_smoke.cpp \
             -o nanovdb-native-tiles-smoke
           ./nanovdb-native-tiles-smoke
+
+      - name: Compile and run CPU NanoVDB FloatGrid reference
+        run: |
+          g++ -std=c++17 -pthread -Wall -Wextra -Werror \
+            -isystem projects/zenvdb/nanovdb-upstream/nanovdb \
+            tools/neural_volume/nanovdb_cpu_reference_smoke.cpp \
+            -o nanovdb-cpu-reference-smoke
+          ./nanovdb-cpu-reference-smoke
