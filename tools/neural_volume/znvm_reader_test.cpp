@@ -82,6 +82,18 @@ int main() {
         assert(!model.partial);
     }
     {
+        zeno::neuralvolume::LeafCorrections corrections;
+        corrections.occupancyOffsets = {7};
+        corrections.exactValueOffsets = {{3, 0.75f}};
+        std::array<uint8_t, 512> occupancy{};
+        std::array<float, 512> values{};
+        occupancy[7] = 0;
+        values[3] = 0.1f;
+        zeno::neuralvolume::applyLeafCorrections(corrections, occupancy, values);
+        assert(occupancy[7] == 1);
+        assert(values[3] == 0.75f);
+    }
+    {
         std::istringstream input(fixture(true, false), std::ios::binary);
         auto model = zeno::neuralvolume::readZNVM(input);
         assert(model.partial);
