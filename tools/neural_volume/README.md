@@ -107,6 +107,7 @@ NanoVDB submodule:
 ```bash
 sudo apt-get install libopenvdb-dev pkg-config
 cmake -S tools/neural_volume/openvdb_roundtrip -B build-openvdb-floatgrid \
+  -DOPENVDB_SOURCE_DIR="$PWD/projects/zenvdb/openvdb" \
   -DNANOVDB_INCLUDE_DIR="$PWD/projects/zenvdb/nanovdb-upstream/nanovdb"
 cmake --build build-openvdb-floatgrid --target openvdb-floatgrid-roundtrip-smoke -j2
 ./build-openvdb-floatgrid/openvdb-floatgrid-roundtrip-smoke
