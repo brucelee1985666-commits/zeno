@@ -137,11 +137,30 @@ struct NeuralVolumeDecoder::Impl {
         size_t domainIndex = 0;
         LeafCorrections corrections;
     };
-    uint32_t domainSize = 0;
-    float background = 0.0f;
-    std::vector<DomainRuntime> domains;
+    NeuralVolumeModel model;
+    std::string configText;
     std::map<std::array<int32_t, 3>, size_t> domainByKey;
     std::map<std::array<int32_t, 3>, LeafRecord> leaves;
+    std::unique_ptr<DomainRuntime> activeRuntime;
+    size_t activeDomainIndex = std::numeric_limits<size_t>::max();
+
+    DomainRuntime& runtimeFor(size_t index) {
+        if (index >= model.domains.size()) throw std::out_of_range("ZNVM domain index is invalid");
+        if (!activeRuntime || activeDomainIndex != index) {
+            const auto& source = model.domains[index];
+            auto runtime = std::make_unique<DomainRuntime>();
+            runtime->classifier = std::make_unique<TinyCudaNNRuntime>(configText, source.classifierParams);
+            runtime->hasRegressor = source.hasRegressor;
+            runtime->valueCenter = source.valueCenter;
+            runtime->valueScale = source.valueScale;
+            if (source.hasRegressor) {
+                runtime->regressor = std::make_unique<TinyCudaNNRuntime>(configText, source.regressorParams);
+            }
+            activeRuntime = std::move(runtime);
+            activeDomainIndex = index;
+        }
+        return *activeRuntime;
+    }
 };
 
 namespace {
@@ -158,53 +177,41 @@ std::vector<std::array<float, 3>> normalizedLeafCoordinates(
     uint32_t domainSize) {
     std::vector<std::array<float, 3>> points(512);
     for (uint32_t offset = 0; offset < 512; ++offset) {
-        const int32_t x = static_cast<int32_t>(offset >> 6);
-        const int32_t y = static_cast<int32_t>((offset >> 3) & 7);
-        const int32_t z = static_cast<int32_t>(offset & 7);
+        const int64_t x = static_cast<int64_t>(leafOrigin[0]) + (offset >> 6);
+        const int64_t y = static_cast<int64_t>(leafOrigin[1]) + ((offset >> 3) & 7);
+        const int64_t z = static_cast<int64_t>(leafOrigin[2]) + (offset & 7);
         points[offset] = {{
-            static_cast<float>(leafOrigin[0] + x - domainOrigin[0]) / domainSize,
-            static_cast<float>(leafOrigin[1] + y - domainOrigin[1]) / domainSize,
-            static_cast<float>(leafOrigin[2] + z - domainOrigin[2]) / domainSize
+            static_cast<float>(x - domainOrigin[0]) / domainSize,
+            static_cast<float>(y - domainOrigin[1]) / domainSize,
+            static_cast<float>(z - domainOrigin[2]) / domainSize
         }};
     }
     return points;
 }
 }
 
-NeuralVolumeDecoder::NeuralVolumeDecoder(const NeuralVolumeModel& model)
+NeuralVolumeDecoder::NeuralVolumeDecoder(NeuralVolumeModel model)
     : m_impl(std::make_unique<Impl>()) {
     if (model.partial) throw std::invalid_argument("cannot construct a complete decoder from a partial ZNVM checkpoint");
     if (model.domainSizeVoxels == 0) throw std::invalid_argument("ZNVM has zero domain size");
-    m_impl->domainSize = model.domainSizeVoxels;
-    m_impl->background = model.background;
-    m_impl->domains.reserve(model.domains.size());
-
-    const auto config = tcnn::cpp::json::parse(model.modelConfigJson);
-    const std::string configText = config.dump();
-    for (size_t i = 0; i < model.domains.size(); ++i) {
-        const auto& source = model.domains[i];
+    m_impl->model = std::move(model);
+    const auto& ownedModel = m_impl->model;
+    m_impl->configText = tcnn::cpp::json::parse(ownedModel.modelConfigJson).dump();
+    for (size_t i = 0; i < ownedModel.domains.size(); ++i) {
+        const auto& source = ownedModel.domains[i];
         if (!m_impl->domainByKey.emplace(source.key, i).second) {
             throw std::runtime_error("ZNVM contains duplicate domain keys");
         }
-        Impl::DomainRuntime runtime;
-        runtime.classifier = std::make_unique<TinyCudaNNRuntime>(configText, source.classifierParams);
-        runtime.hasRegressor = source.hasRegressor;
-        runtime.valueCenter = source.valueCenter;
-        runtime.valueScale = source.valueScale;
-        if (source.hasRegressor) {
-            runtime.regressor = std::make_unique<TinyCudaNNRuntime>(configText, source.regressorParams);
-        }
-        m_impl->domains.push_back(std::move(runtime));
         for (const auto& leaf : source.leaves) {
             if (!m_impl->leaves.emplace(leaf.origin, Impl::LeafRecord{i, leaf}).second) {
                 throw std::runtime_error("ZNVM contains duplicate leaf origins");
             }
-            if (domainKeyForLeaf(leaf.origin, model.domainSizeVoxels) != source.key) {
+            if (domainKeyForLeaf(leaf.origin, ownedModel.domainSizeVoxels) != source.key) {
                 throw std::runtime_error("ZNVM leaf origin does not belong to its recorded domain");
             }
         }
     }
-    if (m_impl->leaves.size() != model.sourceLeafBlocks) {
+    if (m_impl->leaves.size() != ownedModel.sourceLeafBlocks) {
         throw std::runtime_error("ZNVM leaf coverage does not match source leaf count");
     }
 }
@@ -221,32 +228,30 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
     const auto leafIt = m_impl->leaves.find(origin);
     if (leafIt == m_impl->leaves.end()) throw std::out_of_range("requested leaf is not present in ZNVM");
     const auto& record = leafIt->second;
-    const auto& domain = m_impl->domains.at(record.domainIndex);
-    const auto& domainKey = domainKeyForLeaf(origin, m_impl->domainSize);
+    const auto& ownedModel = m_impl->model;
+    const auto& domain = m_impl->runtimeFor(record.domainIndex);
+    const auto& sourceDomain = ownedModel.domains.at(record.domainIndex);
+    const auto& domainKey = domainKeyForLeaf(origin, ownedModel.domainSizeVoxels);
     const auto domainIt = m_impl->domainByKey.find(domainKey);
     if (domainIt == m_impl->domainByKey.end() || domainIt->second != record.domainIndex) {
         throw std::runtime_error("leaf-to-domain lookup is inconsistent");
     }
-    const auto& sourceDomain = record.domainIndex;
-    (void)sourceDomain;
-    // Recover the domain origin from the integer domain key. This exactly
-    // matches the trainer's floor(key * domain_size) convention, including negatives.
     std::array<int32_t, 3> domainOrigin{};
     for (size_t axis = 0; axis < 3; ++axis) {
-        const int64_t coordinate = static_cast<int64_t>(domainKey[axis]) * m_impl->domainSize;
+        const int64_t coordinate = static_cast<int64_t>(domainKey[axis]) * ownedModel.domainSizeVoxels;
         if (coordinate < std::numeric_limits<int32_t>::min() ||
             coordinate > std::numeric_limits<int32_t>::max()) {
             throw std::overflow_error("ZNVM domain origin exceeds index coordinate range");
         }
         domainOrigin[axis] = static_cast<int32_t>(coordinate);
     }
-    const auto points = normalizedLeafCoordinates(origin, domainOrigin, m_impl->domainSize);
+    const auto points = normalizedLeafCoordinates(origin, domainOrigin, ownedModel.domainSizeVoxels);
     const auto logits = domain.classifier->infer(points);
     if (logits.size() != 512) throw std::runtime_error("classifier returned an invalid leaf sample count");
 
     DecodedNeuralLeaf decoded;
     decoded.origin = origin;
-    decoded.values.fill(m_impl->background);
+    decoded.values.fill(ownedModel.background);
     std::vector<std::array<float, 3>> activePoints;
     std::vector<uint16_t> activeOffsets;
     for (uint16_t i = 0; i < 512; ++i) {
@@ -268,7 +273,7 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
     }
 
     applyLeafCorrections(record.corrections, decoded.occupancy, decoded.values);
-    if (!domain.hasRegressor) {
+    if (!sourceDomain.hasRegressor) {
         std::array<bool, 512> exactValuePresent{};
         for (const auto& correction : record.corrections.exactValueOffsets) {
             exactValuePresent[correction.first] = true;
