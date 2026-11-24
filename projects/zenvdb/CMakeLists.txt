@@ -54,6 +54,8 @@ if (EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/NanoVDB.h"
     AND EXISTS "${ZENO_NANOVDB_UPSTREAM_ROOT}/nanovdb/io/IO.h")
     add_library(zeno_znvds_nanovdb_cpu OBJECT
         ZNVDSFileToNanoVDB.cpp
+        ExportNeuralVolumeDataset.cpp
+        "${ZENO_ZNVDS_CONVERTER_DIR}/openvdb_floatgrid_to_znvds.cpp"
         "${ZENO_ZNVDS_CONVERTER_DIR}/znvds_to_nanovdb.cpp")
     get_target_property(ZENO_EXISTING_INCLUDE_DIRS zeno INCLUDE_DIRECTORIES)
     if (ZENO_EXISTING_INCLUDE_DIRS)
@@ -170,6 +172,13 @@ else()
     add_subdirectory(openvdb)
     target_link_libraries(zeno INTERFACE $<BUILD_INTERFACE:openvdb> PRIVATE openvdb)
 endif()
+
+# The isolated ZNVDS node/exporter object target needs the same OpenVDB ABI
+# and include usage requirements as the main Zeno target.
+if (TARGET zeno_znvds_nanovdb_cpu AND TARGET openvdb)
+    target_link_libraries(zeno_znvds_nanovdb_cpu PRIVATE openvdb)
+endif()
+
 if (WIN32)
   target_compile_options(zeno PRIVATE -DNOMINMAX -D_USE_MATH_DEFINES)
 endif()
