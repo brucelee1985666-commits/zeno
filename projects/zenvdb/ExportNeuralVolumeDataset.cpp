@@ -125,11 +125,12 @@ struct ExportNeuralVolumeDataset : zeno::INode {
         writeU64LE(out, tileCount);
         writeU64LE(out, activeVoxelCount);
         writeString(out, grid->m_grid->getName());
+        writeU32LE(out, static_cast<uint32_t>(grid->m_grid->getGridClass()));
         writeF32LE(out, grid->m_grid->background());
         const auto voxelSize = grid->m_grid->voxelSize();
-        writeF32LE(out, static_cast<float>(voxelSize.x()));
-        writeF32LE(out, static_cast<float>(voxelSize.y()));
-        writeF32LE(out, static_cast<float>(voxelSize.z()));
+        writeF32LE(out, static_cast<float>(voxelSize[0]));
+        writeF32LE(out, static_cast<float>(voxelSize[1]));
+        writeF32LE(out, static_cast<float>(voxelSize[2]));
         const auto matrix = affineMap->getMat4();
         for (int row = 0; row < 4; ++row) {
             for (int column = 0; column < 4; ++column) {
