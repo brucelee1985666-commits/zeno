@@ -30,7 +30,7 @@ def make_model(*, partial=False, trailing=b""):
         struct.pack("<fffffII", 1.0, 1.0, 1.0, 1.0, -1.0, 0, 2),
         struct.pack("<I", 1),  # one leaf
         struct.pack("<iii", 0, 0, 0),
-        struct.pack("<IHH", 1, 7, 2),
+        struct.pack("<IH", 1, 7),
         struct.pack("<I", 1),
         struct.pack("<Hf", 3, 0.75),
         trailing,
