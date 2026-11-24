@@ -26,6 +26,7 @@ jobs:
         run: |
           python -m py_compile tools/neural_volume/inspect_znvds.py tools/neural_volume/inspect_znvm.py tools/neural_volume/train_znvds.py
           python -m json.tool tools/neural_volume/colab_remote_gpu_training.ipynb >/dev/null
+          python -m json.tool tools/neural_volume/colab_zeno_node_graph_visual_test.ipynb >/dev/null
       - name: Build and test C++ ZNVM reader
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror \
@@ -114,6 +115,17 @@ jobs:
             build-zeno-node-runtime/neural-volume-test/external-input.vdb \
             build-zeno-node-runtime/neural-volume-test/from-zeno-node.znvds \
             build-zeno-node-runtime/neural-volume-test/from-zeno-node.nvdb
+      - name: Audit ZNVDS output from the executed Zeno node
+        run: |
+          python3 tools/neural_volume/inspect_znvds.py \
+            build-zeno-node-runtime/neural-volume-test/from-zeno-node.znvds --domain-size 128
+      - name: Publish node execution files for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeno-neural-volume-node-output
+          path: build-zeno-node-runtime/neural-volume-test/
+          if-no-files-found: ignore
 
   nanovdb-api:
     runs-on: ubuntu-latest
