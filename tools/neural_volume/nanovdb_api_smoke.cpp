@@ -14,11 +14,16 @@ void zenoNanoVDBApiCompileSmoke(const openvdb::FloatGrid& source)
         throw std::runtime_error("NanoVDB FloatGrid conversion failed");
     }
 
-    auto baseGrid = nanovdb::nanoToOpenVDB(handle);
+    nanovdb::io::writeGrid("compile-smoke.nvdb", handle, nanovdb::io::Codec::NONE, 0);
+    auto readHandle = nanovdb::io::readGrid("compile-smoke.nvdb");
+    if (!readHandle.grid<float>()) {
+        throw std::runtime_error("NanoVDB file read failed");
+    }
+
+    auto baseGrid = nanovdb::nanoToOpenVDB(readHandle);
     auto roundTrip = openvdb::gridPtrCast<openvdb::FloatGrid>(baseGrid);
     if (!roundTrip) {
         throw std::runtime_error("NanoVDB FloatGrid round-trip failed");
     }
 
-    nanovdb::io::writeGrid("compile-smoke.nvdb", handle, nanovdb::io::Codec::NONE);
 }
