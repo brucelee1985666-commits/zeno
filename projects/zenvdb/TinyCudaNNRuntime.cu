@@ -28,13 +28,13 @@ __global__ void floatToHalf(const float* src, __half* dst, size_t n) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) dst[i] = __float2half_rn(src[i]);
 }
-__global__ void compactFloat(const float* src, float* dst, uint32_t width, uint32_t n) {
+__global__ void compactFloat(const float* src, float* dst, uint32_t n) {
     uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) dst[i] = src[static_cast<size_t>(i) * width];
+    if (i < n) dst[i] = src[i]; // first output dimension in column-major [dims, samples]
 }
-__global__ void compactHalf(const __half* src, float* dst, uint32_t width, uint32_t n) {
+__global__ void compactHalf(const __half* src, float* dst, uint32_t n) {
     uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) dst[i] = __half2float(src[static_cast<size_t>(i) * width]);
+    if (i < n) dst[i] = __half2float(src[i]);
 }
 }
 struct TinyCudaNNRuntime::Impl {
@@ -94,7 +94,7 @@ std::vector<float> TinyCudaNNRuntime::infer(const std::vector<std::array<float, 
             const auto& p = points[offset + std::min(i, count - 1)];
             for (unsigned axis = 0; axis < 3; ++axis) {
                 if (!std::isfinite(p[axis])) throw std::invalid_argument("non-finite inference coordinate");
-                hostInput[static_cast<size_t>(i) * 3 + axis] = p[axis];
+                hostInput[static_cast<size_t>(axis) * batch + i] = p[axis];
             }
         }
         DeviceBuffer<float> input(hostInput.size()), compact(batch);
@@ -104,11 +104,11 @@ std::vector<float> TinyCudaNNRuntime::infer(const std::vector<std::array<float, 
         if (m_impl->outputFp16) {
             DeviceBuffer<__half> output(static_cast<size_t>(batch) * m_impl->outputWidth);
             m_impl->module->inference(m_impl->stream, batch, input.get(), output.get(), m_impl->params);
-            compactHalf<<<blocks, 256, 0, m_impl->stream>>>(output.get(), compact.get(), m_impl->outputWidth, batch);
+            compactHalf<<<blocks, 256, 0, m_impl->stream>>>(output.get(), compact.get(), batch);
         } else {
             DeviceBuffer<float> output(static_cast<size_t>(batch) * m_impl->outputWidth);
             m_impl->module->inference(m_impl->stream, batch, input.get(), output.get(), m_impl->params);
-            compactFloat<<<blocks, 256, 0, m_impl->stream>>>(output.get(), compact.get(), m_impl->outputWidth, batch);
+            compactFloat<<<blocks, 256, 0, m_impl->stream>>>(output.get(), compact.get(), batch);
         }
         checkCuda(cudaGetLastError(), "compact inference output");
         checkCuda(cudaMemcpyAsync(hostOutput.data(), compact.get(), batch * sizeof(float), cudaMemcpyDeviceToHost, m_impl->stream), "download inference output");
