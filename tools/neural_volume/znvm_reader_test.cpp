@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -31,7 +32,7 @@ void string(std::ostream& out, const std::string& value) {
     u32(out, static_cast<uint32_t>(value.size())); out.write(value.data(), value.size());
 }
 
-std::string fixture(bool partial, bool trailing) {
+std::string fixture(bool partial, bool trailing, int corruption = 0) {
     std::ostringstream out(std::ios::out | std::ios::binary);
     out.write("ZNVM0001", 8);
     u32(out, 1); u32(out, partial ? 7 : 3);
@@ -53,14 +54,16 @@ std::string fixture(bool partial, bool trailing) {
 
     i32(out, 0); i32(out, 0); i32(out, 0); // domain key
     i32(out, 0); i32(out, 0); i32(out, 0); // domain origin
-    u64(out, 1); f32(out, 0.5f); // classifier params
+    u64(out, 1); f32(out, corruption == 4 ? std::numeric_limits<float>::quiet_NaN() : 0.5f); // classifier params
     u32(out, 0); // no regressor
     f32(out, 1); f32(out, 1); f32(out, 1); f32(out, 1); f32(out, -1);
     u32(out, 1); u32(out, 1); // occupancy/value correction totals
     u32(out, 1); // leaf count
     i32(out, 0); i32(out, 0); i32(out, 0);
-    u32(out, 1); u16(out, 7); // occupancy correction
-    u32(out, 1); u16(out, 3); f32(out, 0.75f); // exact value correction
+    u32(out, corruption == 1 ? 2 : 1); u16(out, 7); // occupancy correction
+    if (corruption == 1) u16(out, 7);
+    u32(out, corruption == 2 ? 2 : 1); u16(out, 3); f32(out, corruption == 3 ? std::numeric_limits<float>::quiet_NaN() : 0.75f); // exact value correction
+    if (corruption == 2) { u16(out, 3); f32(out, 0.5f); }
     if (trailing) out.put('x');
     return out.str();
 }
@@ -86,6 +89,13 @@ int main() {
     }
     {
         std::istringstream input(fixture(false, true), std::ios::binary);
+        bool rejected = false;
+        try { (void)zeno::neuralvolume::readZNVM(input); }
+        catch (const std::runtime_error&) { rejected = true; }
+        assert(rejected);
+    }
+    for (int corruption : {1, 2, 3, 4}) {
+        std::istringstream input(fixture(false, false, corruption), std::ios::binary);
         bool rejected = false;
         try { (void)zeno::neuralvolume::readZNVM(input); }
         catch (const std::runtime_error&) { rejected = true; }
