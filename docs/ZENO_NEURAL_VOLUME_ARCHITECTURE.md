@@ -91,7 +91,7 @@ Foi adicionado o nó `ExportNeuralVolumeDataset` em `projects/zenvdb/ExportNeura
 
 O ZNVDS v1 contém:
 - magic, versão e flags explícitas;
-- nome do grid, background e voxel size;
+- nome e classe do grid (para distinguir, por exemplo, fog volume de level set), background e voxel size;
 - matriz affine index-to-world 4×4 em double, com rejeição de transforms não lineares;
 - tiles ativos internos preservados como registros explícitos;
 - uma máscara de ocupação exata de 512 bits por leaf 8³;
