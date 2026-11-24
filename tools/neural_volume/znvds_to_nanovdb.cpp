@@ -71,6 +71,8 @@ struct Mat3 {
     double a[3][3]{};
     double& operator()(int r, int c) { return a[r][c]; }
     const double& operator()(int r, int c) const { return a[r][c]; }
+    double* operator[](int r) { return a[r]; }
+    const double* operator[](int r) const { return a[r]; }
 };
 
 Mat3 inverse(const Mat3& m) {
