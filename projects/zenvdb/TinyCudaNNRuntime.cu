@@ -160,7 +160,7 @@ struct NeuralVolumeDecoder::Impl {
     };
     struct LeafRecord {
         size_t domainIndex = 0;
-        LeafCorrections corrections;
+        size_t leafIndex = 0;
     };
     NeuralVolumeModel model;
     std::string configText;
@@ -227,8 +227,9 @@ NeuralVolumeDecoder::NeuralVolumeDecoder(NeuralVolumeModel model)
         if (!m_impl->domainByKey.emplace(source.key, i).second) {
             throw std::runtime_error("ZNVM contains duplicate domain keys");
         }
-        for (const auto& leaf : source.leaves) {
-            if (!m_impl->leaves.emplace(leaf.origin, Impl::LeafRecord{i, leaf}).second) {
+        for (size_t leafIndex = 0; leafIndex < source.leaves.size(); ++leafIndex) {
+            const auto& leaf = source.leaves[leafIndex];
+            if (!m_impl->leaves.emplace(leaf.origin, Impl::LeafRecord{i, leafIndex}).second) {
                 throw std::runtime_error("ZNVM contains duplicate leaf origins");
             }
             if (domainKeyForLeaf(leaf.origin, ownedModel.domainSizeVoxels) != source.key) {
@@ -261,6 +262,7 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
     const auto& ownedModel = m_impl->model;
     const auto& domain = m_impl->runtimeFor(record.domainIndex);
     const auto& sourceDomain = ownedModel.domains.at(record.domainIndex);
+    const auto& leafCorrections = sourceDomain.leaves.at(record.leafIndex);
     const auto& domainKey = domainKeyForLeaf(origin, ownedModel.domainSizeVoxels);
     const auto domainIt = m_impl->domainByKey.find(domainKey);
     if (domainIt == m_impl->domainByKey.end() || domainIt->second != record.domainIndex) {
@@ -302,10 +304,10 @@ DecodedNeuralLeaf NeuralVolumeDecoder::decodeLeaf(const std::array<int32_t, 3>& 
         }
     }
 
-    applyLeafCorrections(record.corrections, decoded.occupancy, decoded.values);
+    applyLeafCorrections(leafCorrections, decoded.occupancy, decoded.values);
     if (!sourceDomain.hasRegressor) {
         std::array<bool, 512> exactValuePresent{};
-        for (const auto& correction : record.corrections.exactValueOffsets) {
+        for (const auto& correction : leafCorrections.exactValueOffsets) {
             exactValuePresent[correction.first] = true;
         }
         for (uint16_t i = 0; i < 512; ++i) {
