@@ -24,6 +24,14 @@ jobs:
           python-version: "3.11"
       - name: Check neural trainer syntax
         run: python -m py_compile tools/neural_volume/inspect_znvds.py tools/neural_volume/inspect_znvm.py tools/neural_volume/train_znvds.py
+      - name: Build and test C++ ZNVM reader
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror \
+            -Iprojects/zenvdb/include \
+            projects/zenvdb/NeuralVolumeModel.cpp \
+            tools/neural_volume/znvm_reader_test.cpp \
+            -o znvm-reader-test
+          ./znvm-reader-test
       - name: Validate ZNVDS parser
         run: python -m unittest discover -s tools/neural_volume -p "test_*.py" -v
 
