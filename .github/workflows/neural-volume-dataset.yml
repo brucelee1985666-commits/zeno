@@ -38,9 +38,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libtbb-dev libblosc-dev zlib1g-dev libboost-iostreams-dev libimath-dev
+      - name: Configure pinned OpenVDB headers
+        run: |
+          cmake -S projects/zenvdb/openvdb -B build-openvdb \
+            -DOPENVDB_BUILD_BINARIES=OFF \
+            -DOPENVDB_BUILD_UNITTESTS=OFF \
+            -DOPENVDB_BUILD_PYTHON_MODULE=OFF \
+            -DOPENVDB_BUILD_NANOVDB=OFF \
+            -DUSE_NANOVDB=OFF \
+            -DUSE_EXR=OFF \
+            -DUSE_IMATH_HALF=OFF
       - name: Compile NanoVDB conversion API smoke
         run: |
           g++ -std=c++17 -fsyntax-only \
+            -Ibuild-openvdb/openvdb \
             -Iprojects/zenvdb/openvdb/openvdb \
             -Iprojects/zenvdb/openvdb/nanovdb \
             tools/neural_volume/nanovdb_api_smoke.cpp
