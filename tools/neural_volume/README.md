@@ -126,6 +126,19 @@ The tiny-cuda-nn trainer remains optional and NVIDIA-only. If no compatible GPU
 is available, use the CPU audit and CPU NanoVDB tests; do not substitute a
 CPU mock and call it a neural training/inference result.
 
+### Remote NVIDIA training without a local GPU
+
+For users without an NVIDIA GPU, `colab_remote_gpu_training.ipynb` provides an
+optional Google Colab path. It checks that a real CUDA device was allocated,
+builds the pinned tiny-cuda-nn revision, accepts a user-supplied ZNVDS export,
+runs the existing trainer and validates the resulting ZNVM checkpoint. Open
+the notebook in Colab and select a T4 GPU runtime when one is available.
+
+This is an on-demand remote GPU session, not a promise of free or continuous
+GPU availability. The user must start and authorize the session and provide a
+real `.znvds` dataset. Do not interpret GitHub's CUDA compile-only job as
+training or GPU inference.
+
 ## First-pass model
 
 - Domain size: 128³ voxels by default.
