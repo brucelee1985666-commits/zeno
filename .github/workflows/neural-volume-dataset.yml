@@ -72,3 +72,13 @@ jobs:
             -Iprojects/zenvdb/openvdb/openvdb \
             -Iprojects/zenvdb/openvdb/nanovdb \
             tools/neural_volume/nanovdb_api_smoke.cpp
+
+      - name: Fetch pinned upstream NanoVDB headers
+        run: git submodule update --init projects/zenvdb/nanovdb-upstream
+      - name: Compile and run native active-tile topology smoke
+        run: |
+          g++ -std=c++17 -pthread -Wall -Wextra -Werror \
+            -isystem projects/zenvdb/nanovdb-upstream/nanovdb \
+            tools/neural_volume/nanovdb_native_tiles_smoke.cpp \
+            -o nanovdb-native-tiles-smoke
+          ./nanovdb-native-tiles-smoke
