@@ -120,7 +120,7 @@ struct ExportNeuralVolumeDataset : zeno::INode {
         const char magic[8] = {'Z','N','V','D','S','0','0','1'};
         out.write(magic, sizeof(magic));
         writeU32LE(out, 1u); // format version
-        writeU32LE(out, 3u); // flags: FloatGrid, index-space samples, affine transform
+        writeU32LE(out, 3u); // flags: FloatGrid + affine transform; coordinates are index-space by format
         writeU64LE(out, leafCount);
         writeU64LE(out, tileCount);
         writeU64LE(out, activeVoxelCount);
