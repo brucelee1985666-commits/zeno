@@ -60,7 +60,7 @@ jobs:
       - name: Compile NanoVDB conversion API smoke
         run: |
           g++ -std=c++17 -fsyntax-only \
-            -Ibuild-openvdb/openvdb \
+            -Ibuild-openvdb/openvdb/openvdb \
             -Iprojects/zenvdb/openvdb/openvdb \
             -Iprojects/zenvdb/openvdb/nanovdb \
             tools/neural_volume/nanovdb_api_smoke.cpp
