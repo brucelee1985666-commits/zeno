@@ -13,10 +13,14 @@ def make_dataset(*, occupancy_override=None, trailing=b""):
         occupancy = bytearray(occupancy_override)
     chunks = [
         b"ZNVDS001",
-        struct.pack("<IIQQQ", 1, 1, 1, 0, 2),
+        struct.pack("<IIQQQ", 1, 3, 1, 0, 2),
         struct.pack("<I", 4),
         b"test",
         struct.pack("<ffff", 0.0, 1.0, 1.0, 1.0),
+        struct.pack("<16d", 1.0, 0.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0),
         struct.pack("<iiiI", 0, 0, 0, 2),
         bytes(occupancy),
         struct.pack("<Hf", 0, 0.25),
