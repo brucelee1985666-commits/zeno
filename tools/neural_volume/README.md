@@ -78,6 +78,19 @@ g++ -std=c++17 -pthread -O2 \
 
 The CLI writes a standard NanoVDB file. It does not require CUDA or tiny-cuda-nn.
 
+### Zeno node integration
+
+When the pinned `projects/zenvdb/nanovdb-upstream` submodule is initialized,
+the `projects/zenvdb` CMake configuration enables the CPU converter as an
+isolated object target and registers the `ZNVDSFileToNanoVDB` node in the
+`nanovdb` category. The isolated target keeps the modern pinned NanoVDB
+headers away from the legacy NanoVDB translation units.
+
+The node has no sockets; set its `inputpath` parameter to an existing
+`.znvds` file and `outputpath` to the destination `.nvdb` file. It performs
+the same validated CPU conversion as the standalone CLI. It does not invoke
+the neural model or require CUDA/tiny-cuda-nn.
+
 The tiny-cuda-nn trainer remains optional and NVIDIA-only. If no compatible GPU
 is available, use the CPU audit and CPU NanoVDB tests; do not substitute a
 CPU mock and call it a neural training/inference result.
