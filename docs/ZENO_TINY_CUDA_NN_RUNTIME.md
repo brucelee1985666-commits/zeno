@@ -60,12 +60,10 @@ both with the same HashGrid and CutlassMLP architecture. Partial checkpoints
 are intentionally rejected by the complete-volume decoder.
 
 Each domain is an independent local neural field. To prevent value seams at
-domain boundaries, the trainer stores active values exactly for a one-leaf
-(8-voxel) shell on all six faces of every domain. Interior values still use
+domain boundaries, the trainer stores active values exactly for a six exact boundary voxel planes on all six faces of every domain. Interior values still use
 the configured error tolerance and sparse exact corrections. This is a
-conservative continuity fallback, not neural blending: it trades some
-compression at boundaries for deterministic matching values across adjacent
-domains. Occupancy remains losslessly corrected throughout each leaf.
+conservative continuity fallback, not neural blending: it stores only the
+shared boundary voxel samples exactly, limiting the compression penalty. Occupancy remains losslessly corrected throughout each leaf.
 
 The CUDA bridge has a separate compile-only CI job using the pinned
 CUDA/tiny-cuda-nn/NanoVDB headers. That job can establish source-level CUDA
