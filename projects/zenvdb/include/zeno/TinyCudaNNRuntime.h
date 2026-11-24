@@ -38,6 +38,8 @@ public:
     // Opaque CUDA device pointers: occupancy is 512 uint8 values; values is 512 float32 values.
     const void* occupancyDevice() const;
     const void* valuesDevice() const;
+    // Opaque cudaStream_t handle; enqueue dependent GPU work on this stream.
+    void* streamHandle() const;
     // Synchronizes the producing stream and checks device-side validation flags.
     void wait() const;
 private:
