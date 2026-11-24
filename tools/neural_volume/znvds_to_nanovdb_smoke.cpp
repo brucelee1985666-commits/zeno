@@ -1,5 +1,7 @@
 #include "znvds_to_nanovdb.h"
 
+#include <nanovdb/io/IO.h>
+
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -80,6 +82,11 @@ int main() {
         catch (const std::exception&) { rejected=true; }
         std::filesystem::remove(badPath);
         if(!rejected) throw std::runtime_error("converter accepted a truncated ZNVDS file");
+        const auto nvdbPath=std::filesystem::temp_directory_path()/"znvds-to-nanovdb-roundtrip.nvdb";
+        nanovdb::io::writeGrid(nvdbPath.string(), handle);
+        if(!std::filesystem::exists(nvdbPath) || std::filesystem::file_size(nvdbPath)==0)
+            throw std::runtime_error("NanoVDB serialization produced no output file");
+        std::filesystem::remove(nvdbPath);
         std::filesystem::remove(path);
         std::cout<<"ZNVDS -> NanoVDB CPU round-trip passed: values, occupancy, all tile levels, class, name, affine transform\n";
         return 0;
