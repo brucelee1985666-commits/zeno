@@ -35,6 +35,37 @@ jobs:
       - name: Validate ZNVDS parser
         run: python -m unittest discover -s tools/neural_volume -p "test_*.py" -v
 
+  cuda-compile:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - name: Install build prerequisites
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y git g++ ca-certificates
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Fetch pinned NanoVDB headers
+        run: git submodule update --init projects/zenvdb/nanovdb-upstream
+      - name: Fetch pinned tiny-cuda-nn headers
+        run: |
+          git clone https://github.com/NVlabs/tiny-cuda-nn.git /tmp/tiny-cuda-nn
+          git -C /tmp/tiny-cuda-nn checkout 3daa6e5b8b8e0fa17971a1a20acfbb3754494b38
+      - name: Compile CUDA neural volume bridge (compile-only, no GPU required)
+        run: |
+          nvcc --version
+          nvcc -std=c++17 -arch=sm_75 --expt-relaxed-constexpr -Xcompiler=-fPIC \
+            -DZENO_WITH_TINY_CUDA_NN=1 \
+            -DZENO_WITH_NANOVDB_CUDA_BUILDERS=1 \
+            -DTCNN_MIN_GPU_ARCH=75 \
+            -Iprojects/zenvdb/include \
+            -Iprojects/zenvdb/nanovdb-upstream/nanovdb \
+            -I/tmp/tiny-cuda-nn/include \
+            -I/tmp/tiny-cuda-nn/dependencies \
+            -c projects/zenvdb/TinyCudaNNRuntime.cu \
+            -o /tmp/TinyCudaNNRuntime.o
+
   nanovdb-api:
     runs-on: ubuntu-latest
     steps:
