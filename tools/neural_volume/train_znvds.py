@@ -202,9 +202,10 @@ def encode_domain(key, leaves, args):
     x_occ = torch.as_tensor(np.asarray(coords, dtype=np.float32), device="cuda")
     y_occ = torch.as_tensor(np.asarray(occupancy, dtype=np.float32).reshape(-1, 1), device="cuda")
 
-    domain_seed = args.seed + (
+    domain_hash = (
         key[0] * 73856093 ^ key[1] * 19349663 ^ key[2] * 83492791
-    ) % 100000
+    ) & 0x7fffffff
+    domain_seed = (args.seed + domain_hash) & 0x7fffffff
     classifier, classifier_config = make_model(domain_seed)
     train_model(classifier, x_occ, y_occ, args.steps, args.batch_size, args.learning_rate, "classifier")
     logits = infer(classifier, x_occ)
