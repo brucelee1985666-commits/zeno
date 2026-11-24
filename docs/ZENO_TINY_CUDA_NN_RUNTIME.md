@@ -78,3 +78,21 @@ The returned move-only `NanoVDBDeviceGrid` owns the NanoVDB device buffer. Keep 
 CMake enables this bridge only when `ZENO_WITH_TINY_CUDA_NN=ON` and the selected NanoVDB headers contain both `nanovdb/tools/cuda/PointsToGrid.cuh` and `nanovdb/tools/cuda/IndexToGrid.cuh`. Older NanoVDB revisions still compile the neural runtime but the bridge method reports that the GPU builders are unavailable. This feature-detection is intentional: do not silently mix headers from a different NanoVDB/OpenVDB revision.
 
 **Current topology boundary:** this first bridge builds all leaf-level active voxels into one sparse NanoVDB FloatGrid. Active internal tiles recorded in `model.activeTiles` are uploaded as a separate GPU sidecar and reported by `sourceActiveTileCount()`, but they are not yet inserted as NanoVDB internal tree tiles. A model containing only active tiles and no active leaf voxels is therefore rejected. This is not yet a complete topology round-trip for tile-heavy grids. The CUDA path has not been compiled or executed on a GPU in this environment; the existing CPU-only CI does not validate it.
+
+
+Minimal C++ usage (inside a CUDA-enabled consumer):
+
+```cpp
+#include <zeno/TinyCudaNNRuntime.h>
+#include <nanovdb/NanoVDB.h>
+
+using namespace zeno::neuralvolume;
+auto model = readZNVMFile(checkpointPath);
+NeuralVolumeDecoder decoder(std::move(model));
+auto deviceGrid = decoder.buildNanoVDBDevice();
+auto* grid = static_cast<const nanovdb::NanoGrid<float>*>(deviceGrid.gridDevice());
+auto* sourceTiles = static_cast<const ActiveTile*>(deviceGrid.sourceActiveTilesDevice());
+// Keep deviceGrid alive while grid/sourceTiles are used by CUDA kernels.
+```
+
+This API currently returns a device-only grid handle; it does not write a `.nvdb` file or register a Zeno graph node. Those are separate integration tasks. Copying the full grid to host solely to serialize it would defeat the current device-resident path.
