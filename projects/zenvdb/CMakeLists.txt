@@ -38,20 +38,20 @@ endif()
 if (ZENO_NANOVDB_INCLUDE_DIR)
     target_include_directories(zeno PRIVATE ${ZENO_NANOVDB_INCLUDE_DIR})
 else()
-    list(FILTER PROJECT_SOURCE EXCLUDE REGEX "(OpenVDBToNanoVDB|ExportNeuralVolumeDataset)\\.cpp$")
+    # The legacy OpenVDBToNanoVDB node needs NanoVDB headers matching the
+    # selected OpenVDB installation. The ZNVDS exporter itself does not.
+    list(FILTER PROJECT_SOURCE EXCLUDE REGEX "OpenVDBToNanoVDB\\.cpp$")
     message(STATUS "Matching NanoVDB headers not found: disabling Zeno NanoVDB utility nodes")
 endif()
 
 set(ZENO_NANOVDB_UPSTREAM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/nanovdb-upstream")
 set(ZENO_ZNVDS_CONVERTER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/neural_volume")
 
-# The OpenVDB FloatGrid exporter is a reusable CPU serializer used by
-# ExportNeuralVolumeDataset. It is linked with the same OpenVDB target/ABI.
-if (ZENO_NANOVDB_INCLUDE_DIR)
-    target_sources(zeno PRIVATE
-        "${ZENO_ZNVDS_CONVERTER_DIR}/openvdb_floatgrid_to_znvds.cpp")
-    target_include_directories(zeno PRIVATE "${ZENO_ZNVDS_CONVERTER_DIR}")
-endif()
+# The OpenVDB FloatGrid exporter uses OpenVDB only; it must not be disabled
+# merely because the optional legacy NanoVDB headers are unavailable.
+target_sources(zeno PRIVATE
+    "${ZENO_ZNVDS_CONVERTER_DIR}/openvdb_floatgrid_to_znvds.cpp")
+target_include_directories(zeno PRIVATE "${ZENO_ZNVDS_CONVERTER_DIR}")
 
 # The ZNVDS -> NanoVDB CPU converter uses a separately pinned upstream
 # NanoVDB API. Compile it in an isolated object target so these modern headers
