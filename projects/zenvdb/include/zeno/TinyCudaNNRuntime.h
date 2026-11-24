@@ -33,6 +33,7 @@ public:
     NeuralVolumeDecoder& operator=(NeuralVolumeDecoder&&) noexcept;
     NeuralVolumeDecoder(const NeuralVolumeDecoder&) = delete;
     NeuralVolumeDecoder& operator=(const NeuralVolumeDecoder&) = delete;
+    const NeuralVolumeModel& sourceModel() const;
     bool hasLeaf(const std::array<int32_t, 3>& leafOrigin) const;
     DecodedNeuralLeaf decodeLeaf(const std::array<int32_t, 3>& leafOrigin);
 private:
