@@ -46,6 +46,8 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y git g++ ca-certificates
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Mark checkout safe for containerized Git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Fetch pinned NanoVDB headers
         run: git submodule update --init projects/zenvdb/nanovdb-upstream
       - name: Fetch pinned tiny-cuda-nn headers
